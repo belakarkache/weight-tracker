@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="pt-BR" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" sizes="72x72" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0c1116" />
+    <meta
+      name="description"
+      content="Registre peso e refeições, acompanhe calorias, metas e estatísticas. App em português, leve e focado no dia a dia."
+    />
+    <meta name="robots" content="index, follow" />
+    <meta name="format-detection" content="telephone=no" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:title" content="Diário de Peso" />
+    <meta
+      property="og:description"
+      content="Registre peso e refeições, acompanhe calorias, metas e estatísticas. App em português, leve e focado no dia a dia."
+    />
+    <meta property="og:image" content="" id="meta-og-image" />
+    <meta property="og:image:type" content="image/svg+xml" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content="" id="meta-twitter-image" />
+    <script>
+      (function () {
+        var base = (function () {
+          var b = document.querySelector("base");
+          return b && b.href ? new URL(b.href).pathname.replace(/\/$/, "") : "";
+        })();
+        var path = (base || "") + "/og-image.svg";
+        var abs = location.origin + (path.startsWith("/") ? path : "/" + path);
+        var og = document.getElementById("meta-og-image");
+        var tw = document.getElementById("meta-twitter-image");
+        if (og) og.setAttribute("content", abs);
+        if (tw) tw.setAttribute("content", abs);
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <title>Diário de Peso</title>
+  </head>
+  <body class="min-h-screen text-slate-100 antialiased app-body-bg">
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

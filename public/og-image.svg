@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Diário de Peso  salada">
+  <defs>
+    <radialGradient id="og-g" cx="50%" cy="0%" r="75%">
+      <stop offset="0%" stop-color="rgba(45,212,191,0.14)"/>
+      <stop offset="55%" stop-color="#0c1116"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#og-g)"/>
+  <rect width="1200" height="630" fill="#0c1116" fill-opacity="0.88"/>
+  <text
+    x="600"
+    y="360"
+    text-anchor="middle"
+    font-size="220"
+    font-family="Apple Color Emoji, Segoe UI Emoji, Noto Color Emoji, Twemoji Mozilla, sans-serif"
+  >>W</text>
+  <text
+    x="600"
+    y="520"
+    text-anchor="middle"
+    fill="#94a3b8"
+    font-size="34"
+    font-family="Inter, system-ui, -apple-system, sans-serif"
+    letter-spacing="0.04em"
+  >Diário de Peso</text>
+</svg>

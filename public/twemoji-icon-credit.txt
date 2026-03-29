@@ -1,0 +1,2 @@
+O arquivo apple-touch-icon.png usa o desenho do emoji “salada verde” (U+1F957) do projeto Twemoji
+(https://github.com/twitter/twemoji), licença CC-BY 4.0.
