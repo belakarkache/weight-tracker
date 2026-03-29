@@ -4,10 +4,11 @@ import AppNavBar from "../components/AppNavBar.vue";
 
 <template>
   <div
-    class="app-layout flex min-h-full flex-col"
+    class="app-layout flex h-full min-h-0 flex-col overflow-hidden"
     style="
       background: var(--app-bg);
-      background-image: radial-gradient(
+      background-image:
+        radial-gradient(
           ellipse 80% 50% at 50% -20%,
           rgba(45, 212, 191, 0.06),
           transparent
@@ -20,8 +21,8 @@ import AppNavBar from "../components/AppNavBar.vue";
     "
   >
     <main
-      class="min-h-0 flex-1"
-      style="padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));"
+      class="flex min-h-0 flex-1 flex-col overflow-hidden"
+      style="padding-bottom: calc(4.5rem + env(safe-area-inset-bottom))"
     >
       <router-view />
     </main>

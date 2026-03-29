@@ -54,14 +54,30 @@ function normalizeMeal(m) {
         )
     : [];
 
+  const src = m?.source;
+  const source =
+    src === "ingredient" || src === "recipe" ? src : "manual";
+
   return {
     id: m?.id ?? newId(),
     name: (m?.name ?? "").trim() || "Refeição",
     recordedAt: m?.recordedAt ?? new Date().toISOString(),
-    source: m?.source === "ingredient" ? "ingredient" : "manual",
+    source,
     ingredientId: m?.ingredientId ?? null,
     quantityConsumed:
       m?.quantityConsumed != null ? Number(m.quantityConsumed) : null,
+    recipeId: m?.recipeId ?? null,
+    recipeName:
+      typeof m?.recipeName === "string" ? m.recipeName.trim() || null : null,
+    yieldQuantity:
+      m?.yieldQuantity != null && Number(m.yieldQuantity) > 0
+        ? Number(m.yieldQuantity)
+        : null,
+    yieldUnit: m?.yieldUnit ?? null,
+    recipeQuantityConsumed:
+      m?.recipeQuantityConsumed != null
+        ? Number(m.recipeQuantityConsumed)
+        : null,
     kcal: Math.max(0, Number(m?.kcal) || 0),
     protein: m?.protein != null ? round1(m.protein) : null,
     carbs: m?.carbs != null ? round1(m.carbs) : null,

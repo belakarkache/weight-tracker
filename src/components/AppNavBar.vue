@@ -3,7 +3,7 @@ import { useRoute } from "vue-router";
 import {
   IconCalendarEvent,
   IconCarrot,
-  IconChartBar,
+  IconChefHat,
   IconUser,
 } from "@tabler/icons-vue";
 const route = useRoute();
@@ -11,10 +11,10 @@ const route = useRoute();
 const items = [
   { name: "today", path: "/", label: "Hoje", icon: IconCalendarEvent },
   {
-    name: "statistics",
-    path: "/statistics",
-    label: "Estatísticas",
-    icon: IconChartBar,
+    name: "recipes",
+    path: "/recipes",
+    label: "Receitas",
+    icon: IconChefHat,
   },
   {
     name: "ingredients",

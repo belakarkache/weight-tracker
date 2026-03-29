@@ -8,6 +8,7 @@ import {
   IconPlus,
   IconPencil,
   IconTrash,
+  IconChefHat,
   IconSoup,
   IconTarget,
   IconApple,
@@ -22,23 +23,37 @@ import Popover from "primevue/popover";
 import InputText from "primevue/inputtext";
 import InputNumber from "primevue/inputnumber";
 import MultiSelect from "primevue/multiselect";
+import Select from "primevue/select";
 import SpeedDial from "primevue/speeddial";
 import AppHeader from "../components/AppHeader.vue";
+import AppHeaderStatLink from "../components/AppHeaderStatLink.vue";
 import InfoNotice from "../components/InfoNotice.vue";
 import { useOnboarding } from "../composables/useOnboarding";
 import { useIngredients } from "../composables/useIngredients";
+import { useRecipes } from "../composables/useRecipes";
 import {
   useDailyLog,
   dateKeyFromDate,
   dayTotals,
 } from "../composables/useDailyLog";
 import { dailyCalorieTarget, scaleIngredientMacros } from "../utils/nutrition";
+import { buildMealFromRecipePortion } from "../utils/recipes";
 const router = useRouter();
 const toast = useToast();
 const { getStored: getProfile, save: saveProfile } = useOnboarding();
 const profileTick = ref(0);
-const { getStored: getIngredients, upsert: upsertIngredient } = useIngredients();
+const { getStored: getIngredients, upsert: upsertIngredient } =
+  useIngredients();
+const { getStored: getRecipes } = useRecipes();
 const dailyLog = useDailyLog();
+
+const recipesList = ref(getRecipes());
+function refreshRecipes() {
+  recipesList.value = getRecipes();
+}
+const recipeMap = computed(() =>
+  Object.fromEntries(recipesList.value.map((r) => [r.id, r])),
+);
 
 const selectedDate = ref(new Date());
 const datePopoverRef = ref();
@@ -290,6 +305,8 @@ const mealForm = ref({
   mode: "ingredient",
   ingredientIds: [],
   ingredientQuantities: {},
+  recipeId: null,
+  recipeConsumedQty: null,
   name: "",
   kcal: null,
   protein: null,
@@ -308,7 +325,12 @@ const selectedIngredients = computed(() =>
 );
 
 function firstWord(text) {
-  return String(text ?? "").trim().split(/\s+/).filter(Boolean)[0] ?? "";
+  return (
+    String(text ?? "")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)[0] ?? ""
+  );
 }
 
 function truncateWithEllipsis(text, max = 32) {
@@ -331,7 +353,11 @@ const ingredientMealEntries = computed(() =>
     .map((ing) => {
       const typedQty = Number(mealForm.value.ingredientQuantities?.[ing.id]);
       const quantity =
-        typedQty > 0 ? typedQty : Number(ing.quantity) > 0 ? Number(ing.quantity) : 100;
+        typedQty > 0
+          ? typedQty
+          : Number(ing.quantity) > 0
+            ? Number(ing.quantity)
+            : 100;
       const macros = scaleIngredientMacros(ing, quantity);
       return {
         ingredientId: ing.id,
@@ -382,25 +408,72 @@ const scaledFromIngredient = computed(() =>
   ),
 );
 
+const recipeMealPreview = computed(() => {
+  const f = mealForm.value;
+  if (f.mode !== "recipe" || !f.recipeId) {
+    return { entries: [], totals: { kcal: 0, protein: 0, carbs: 0, fat: 0 } };
+  }
+  const recipe = recipeMap.value[f.recipeId];
+  return buildMealFromRecipePortion(
+    recipe,
+    f.recipeConsumedQty,
+    (id) => ingredientMap.value[id],
+  );
+});
+
+watch(
+  () => mealForm.value.recipeId,
+  (id) => {
+    if (mealForm.value.mode !== "recipe" || !id) return;
+    const r = recipeMap.value[id];
+    if (!r) return;
+    const cur = Number(mealForm.value.recipeConsumedQty);
+    if (!cur || cur <= 0) {
+      mealForm.value.recipeConsumedQty = r.yieldQuantity;
+    }
+  },
+);
+
+const mealFormSelectedRecipe = computed(() => {
+  const id = mealForm.value.recipeId;
+  return id ? (recipeMap.value[id] ?? null) : null;
+});
+
 const mealFormValid = computed(() => {
   const f = mealForm.value;
   if (f.mode === "ingredient") {
-    if (!Array.isArray(f.ingredientIds) || !f.ingredientIds.length) return false;
-    const hasInvalid = ingredientMealEntries.value.some((entry) => entry.kcal < 0);
+    if (!Array.isArray(f.ingredientIds) || !f.ingredientIds.length)
+      return false;
+    const hasInvalid = ingredientMealEntries.value.some(
+      (entry) => entry.kcal < 0,
+    );
     if (hasInvalid) return false;
-    return scaledFromIngredient.value.kcal > 0 && ingredientMealEntries.value.length > 0;
+    return (
+      scaledFromIngredient.value.kcal > 0 &&
+      ingredientMealEntries.value.length > 0
+    );
+  }
+  if (f.mode === "recipe") {
+    if (!f.recipeId) return false;
+    const qty = Number(f.recipeConsumedQty);
+    if (!qty || qty <= 0) return false;
+    const { entries, totals } = recipeMealPreview.value;
+    return entries.length > 0 && totals.kcal > 0;
   }
   return f.name.trim().length > 0 && f.kcal != null && Number(f.kcal) >= 0;
 });
 
 function openMealCreate() {
   refreshIngredients();
+  refreshRecipes();
   editingMealId.value = null;
   mealRecordedAtPreserve.value = null;
   mealForm.value = {
     mode: "ingredient",
     ingredientIds: [],
     ingredientQuantities: {},
+    recipeId: null,
+    recipeConsumedQty: null,
     name: "",
     kcal: null,
     protein: null,
@@ -437,7 +510,8 @@ function saveQuickIngredient() {
     fat: f.fat != null ? Number(f.fat) : null,
   });
   refreshIngredients();
-  const createdId = ingredientsList.value.find((x) => !beforeIds.has(x.id))?.id ?? null;
+  const createdId =
+    ingredientsList.value.find((x) => !beforeIds.has(x.id))?.id ?? null;
   if (createdId) {
     mealForm.value.ingredientIds = [
       ...new Set([...(mealForm.value.ingredientIds ?? []), createdId]),
@@ -452,8 +526,28 @@ function saveQuickIngredient() {
 
 function openMealEdit(meal) {
   refreshIngredients();
+  refreshRecipes();
   editingMealId.value = meal.id;
   mealRecordedAtPreserve.value = meal.recordedAt;
+  if (meal.source === "recipe") {
+    mealForm.value = {
+      mode: "recipe",
+      ingredientIds: [],
+      ingredientQuantities: {},
+      recipeId: meal.recipeId ?? null,
+      recipeConsumedQty:
+        meal.recipeQuantityConsumed != null
+          ? Number(meal.recipeQuantityConsumed)
+          : null,
+      name: meal.name ?? "",
+      kcal: meal.kcal ?? null,
+      protein: meal.protein ?? null,
+      carbs: meal.carbs ?? null,
+      fat: meal.fat ?? null,
+    };
+    mealDialogOpen.value = true;
+    return;
+  }
   const idsFromMeal = Array.isArray(meal.ingredients)
     ? meal.ingredients.map((x) => x.ingredientId).filter(Boolean)
     : meal.ingredientId
@@ -472,6 +566,8 @@ function openMealEdit(meal) {
     mode: meal.source === "ingredient" ? "ingredient" : "manual",
     ingredientIds: idsFromMeal,
     ingredientQuantities: qtyFromMeal,
+    recipeId: null,
+    recipeConsumedQty: null,
     name: meal.name ?? "",
     kcal: meal.kcal ?? null,
     protein: meal.protein ?? null,
@@ -511,11 +607,48 @@ function saveMeal() {
       source: "ingredient",
       ingredientId: entries[0]?.ingredientId ?? null,
       quantityConsumed: entries[0]?.quantityConsumed ?? null,
+      recipeId: null,
+      recipeName: null,
+      yieldQuantity: null,
+      yieldUnit: null,
+      recipeQuantityConsumed: null,
       ingredients: entries,
       kcal: Number(scaledFromIngredient.value.kcal.toFixed(1)),
       protein: Number(scaledFromIngredient.value.protein.toFixed(1)) || null,
       carbs: Number(scaledFromIngredient.value.carbs.toFixed(1)) || null,
       fat: Number(scaledFromIngredient.value.fat.toFixed(1)) || null,
+    });
+  } else if (f.mode === "recipe") {
+    const recipe = recipeMap.value[f.recipeId];
+    if (!recipe) {
+      toast.add({
+        group: "pwa",
+        severity: "warn",
+        summary: "Receita indisponível",
+        detail:
+          "Esta receita não existe mais. Escolha outra ou monte manualmente.",
+        life: 4000,
+      });
+      return;
+    }
+    const { entries, totals } = recipeMealPreview.value;
+    dailyLog.upsertMeal(dk, {
+      id: editingMealId.value ?? undefined,
+      name: recipe.name,
+      recordedAt,
+      source: "recipe",
+      ingredientId: entries[0]?.ingredientId ?? null,
+      quantityConsumed: null,
+      recipeId: recipe.id,
+      recipeName: recipe.name,
+      yieldQuantity: recipe.yieldQuantity,
+      yieldUnit: recipe.yieldUnit,
+      recipeQuantityConsumed: Number(f.recipeConsumedQty),
+      ingredients: entries,
+      kcal: Number(totals.kcal.toFixed(1)),
+      protein: Number(totals.protein.toFixed(1)) || null,
+      carbs: Number(totals.carbs.toFixed(1)) || null,
+      fat: Number(totals.fat.toFixed(1)) || null,
     });
   } else {
     dailyLog.upsertMeal(dk, {
@@ -525,6 +658,12 @@ function saveMeal() {
       source: "manual",
       ingredientId: null,
       quantityConsumed: null,
+      recipeId: null,
+      recipeName: null,
+      yieldQuantity: null,
+      yieldUnit: null,
+      recipeQuantityConsumed: null,
+      ingredients: [],
       kcal: Number(f.kcal),
       protein: f.protein != null ? Number(f.protein) : null,
       carbs: f.carbs != null ? Number(f.carbs) : null,
@@ -723,7 +862,9 @@ watch(
   (ids) => {
     const keep = new Set(ids ?? []);
     const next = {};
-    for (const [k, v] of Object.entries(mealForm.value.ingredientQuantities ?? {})) {
+    for (const [k, v] of Object.entries(
+      mealForm.value.ingredientQuantities ?? {},
+    )) {
       if (keep.has(k)) next[k] = v;
     }
     for (const id of keep) {
@@ -747,9 +888,12 @@ watch(removeWeightDialogOpen, (open) => {
 
 <template>
   <div
-    class="app-page relative flex min-h-full flex-col overflow-hidden text-slate-100"
+    class="app-page relative flex h-full min-h-0 flex-col overflow-hidden text-slate-100"
   >
     <AppHeader :subtitle="headerSubtitle">
+      <template #actions>
+        <AppHeaderStatLink />
+      </template>
       <template #title>
         <div class="flex min-w-0 flex-wrap items-center gap-2">
           <button
@@ -795,7 +939,7 @@ watch(removeWeightDialogOpen, (open) => {
     </AppHeader>
 
     <div
-      class="relative z-[1] mx-auto flex w-full max-w-lg flex-1 min-w-0 flex-col gap-5 overflow-y-auto overflow-x-hidden px-4 pb-28 pt-4"
+      class="relative z-[1] mx-auto flex min-h-0 w-full max-w-lg flex-1 min-w-0 flex-col gap-5 overflow-y-auto overflow-x-hidden px-4 pb-28 pt-4"
     >
       <div
         class="pointer-events-none absolute inset-0 z-0"
@@ -1128,9 +1272,9 @@ watch(removeWeightDialogOpen, (open) => {
                   stroke-width="1.25"
                 />
               </div>
-              <p class="m-0 max-w-[240px] text-sm text-app-text-muted">
-                Nenhuma refeição neste dia. Adicione pela biblioteca de
-                ingredientes ou manualmente.
+              <p class="m-0 max-w-[260px] text-sm text-app-text-muted">
+                Nenhuma refeição neste dia. Monte com ingredientes, use uma
+                receita salva ou registre manualmente.
               </p>
               <Button
                 size="small"
@@ -1170,8 +1314,28 @@ watch(removeWeightDialogOpen, (open) => {
                         {{ fmtTime(meal.recordedAt) }}
                       </span>
                     </div>
+                    <p
+                      v-if="
+                        meal.source === 'recipe' &&
+                        meal.recipeQuantityConsumed != null &&
+                        meal.yieldQuantity != null
+                      "
+                      class="mt-1 m-0 text-[0.75rem] text-app-text-muted-2"
+                    >
+                      Porção:
+                      {{ fmt1(meal.recipeQuantityConsumed) }}
+                      {{ meal.yieldUnit ?? "" }}
+                      de
+                      {{ fmt1(meal.yieldQuantity) }}
+                      {{ meal.yieldUnit ?? "" }}
+                      (receita)
+                    </p>
                     <div
-                      v-if="meal.source === 'ingredient' && (meal.ingredients?.length ?? 0)"
+                      v-if="
+                        (meal.source === 'ingredient' ||
+                          meal.source === 'recipe') &&
+                        (meal.ingredients?.length ?? 0)
+                      "
                       class="mt-2"
                     >
                       <button
@@ -1179,7 +1343,11 @@ watch(removeWeightDialogOpen, (open) => {
                         class="inline-flex items-center gap-1 rounded-app-sm border border-app-border bg-app-elevated/60 px-2 py-1 text-[0.6875rem] text-app-text-muted-2"
                         @click="toggleMealExpanded(meal.id)"
                       >
-                        {{ isMealExpanded(meal.id) ? "Ocultar ingredientes" : "Ver ingredientes" }}
+                        {{
+                          isMealExpanded(meal.id)
+                            ? "Ocultar ingredientes"
+                            : "Ver ingredientes"
+                        }}
                         <IconChevronDown
                           class="size-3.5 transition-transform"
                           :class="{ 'rotate-180': isMealExpanded(meal.id) }"
@@ -1195,7 +1363,8 @@ watch(removeWeightDialogOpen, (open) => {
                           :key="`${meal.id}-${entry.ingredientId}-${entry.name}`"
                         >
                           {{ entry.name }} ({{ fmt1(entry.quantityConsumed) }}
-                          {{ entry.unit ?? "g" }}) - {{ fmtInt(entry.kcal) }} kcal
+                          {{ entry.unit ?? "g" }}) -
+                          {{ fmtInt(entry.kcal) }} kcal
                         </li>
                       </ul>
                     </div>
@@ -1314,8 +1483,8 @@ watch(removeWeightDialogOpen, (open) => {
               class="mb-3"
             >
               <p class="m-0 text-[0.75rem] text-app-text-muted">
-                Proteína indicada: {{ fmtInt(proteinGoal) }} g/dia ·
-                Consumido: {{ fmt1(totals.protein) }} g
+                Proteína indicada: {{ fmtInt(proteinGoal) }} g/dia · Consumido:
+                {{ fmt1(totals.protein) }} g
                 <span class="text-app-text-muted-2">
                   ({{ fmtInt(proteinProgress.pct) }}%)
                 </span>
@@ -1396,18 +1565,42 @@ watch(removeWeightDialogOpen, (open) => {
             </div>
           </section>
 
-          <p
-            class="m-0 pb-2 text-center text-[0.6875rem] text-app-text-muted-2"
+          <div
+            class="flex flex-col items-center gap-2 pb-2 text-center text-[0.6875rem] text-app-text-muted-2"
           >
-            Ingredientes cadastrados em
-            <button
-              type="button"
-              class="font-medium text-teal-400 underline-offset-2 hover:underline"
-              @click="router.push({ name: 'ingredients' })"
-            >
-              Ingredientes
-            </button>
-          </p>
+            <div class="flex flex-wrap justify-center gap-2">
+              <Button
+                size="small"
+                severity="secondary"
+                outlined
+                class="border-app-border text-[0.6875rem]"
+                @click="router.push({ name: 'ingredients' })"
+              >
+                <span class="inline-flex items-center gap-1.5">
+                  <IconPlus
+                    class="size-3.5"
+                    stroke-width="2"
+                  />
+                  Novo ingrediente
+                </span>
+              </Button>
+              <Button
+                size="small"
+                severity="secondary"
+                outlined
+                class="border-app-border text-[0.6875rem]"
+                @click="router.push({ name: 'recipes' })"
+              >
+                <span class="inline-flex items-center gap-1.5">
+                  <IconChefHat
+                    class="size-3.5"
+                    stroke-width="2"
+                  />
+                  Nova receita
+                </span>
+              </Button>
+            </div>
+          </div>
         </section>
       </div>
     </div>
@@ -1423,11 +1616,11 @@ watch(removeWeightDialogOpen, (open) => {
     >
       <div class="flex flex-col gap-4">
         <div
-          class="flex rounded-app-sm border border-app-border bg-app-elevated p-0.5"
+          class="grid grid-cols-3 gap-0.5 rounded-app-sm border border-app-border bg-app-elevated p-0.5"
         >
           <button
             type="button"
-            class="flex-1 rounded-app-sm px-2 py-2 text-xs font-semibold transition-colors"
+            class="rounded-app-sm px-1.5 py-2 text-[0.6875rem] font-semibold leading-tight transition-colors sm:px-2 sm:text-xs"
             :class="
               mealForm.mode === 'ingredient'
                 ? 'bg-teal-600/90 text-white shadow-sm'
@@ -1435,11 +1628,23 @@ watch(removeWeightDialogOpen, (open) => {
             "
             @click="mealForm.mode = 'ingredient'"
           >
-            Biblioteca
+            Montar
           </button>
           <button
             type="button"
-            class="flex-1 rounded-app-sm px-2 py-2 text-xs font-semibold transition-colors"
+            class="rounded-app-sm px-1.5 py-2 text-[0.6875rem] font-semibold leading-tight transition-colors sm:px-2 sm:text-xs"
+            :class="
+              mealForm.mode === 'recipe'
+                ? 'bg-teal-600/90 text-white shadow-sm'
+                : 'text-app-text-muted-2 hover:text-app-text'
+            "
+            @click="mealForm.mode = 'recipe'"
+          >
+            Receita
+          </button>
+          <button
+            type="button"
+            class="rounded-app-sm px-1.5 py-2 text-[0.6875rem] font-semibold leading-tight transition-colors sm:px-2 sm:text-xs"
             :class="
               mealForm.mode === 'manual'
                 ? 'bg-teal-600/90 text-white shadow-sm'
@@ -1561,6 +1766,115 @@ watch(removeWeightDialogOpen, (open) => {
           </div>
         </template>
 
+        <div
+          v-else-if="mealForm.mode === 'recipe' && !recipesList.length"
+          class="rounded-app-sm border border-dashed border-app-border bg-app-elevated/40 p-3"
+        >
+          <p class="m-0 text-[0.8125rem] leading-relaxed text-app-text-muted">
+            Você ainda não tem receitas salvas. Crie uma combinação de
+            ingredientes em Receitas para usar aqui.
+          </p>
+          <div class="mt-2.5 flex flex-wrap items-center gap-2">
+            <Button
+              size="small"
+              @click="
+                mealDialogOpen = false;
+                router.push({ name: 'recipes' });
+              "
+            >
+              <span class="inline-flex items-center gap-1.5">
+                <IconChefHat
+                  class="size-4"
+                  stroke-width="2"
+                  aria-hidden="true"
+                />
+                Ir para Receitas
+              </span>
+            </Button>
+          </div>
+        </div>
+
+        <template v-else-if="mealForm.mode === 'recipe' && recipesList.length">
+          <div>
+            <label
+              class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
+              for="meal-recipe-select"
+              >Receita</label
+            >
+            <Select
+              id="meal-recipe-select"
+              v-model="mealForm.recipeId"
+              :options="recipesList"
+              option-label="name"
+              option-value="id"
+              filter
+              placeholder="Escolher receita"
+              class="w-full"
+              fluid
+            />
+          </div>
+          <div v-if="mealFormSelectedRecipe">
+            <label
+              class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
+              for="meal-recipe-qty"
+            >
+              Quanto você consumiu?
+              <span class="font-normal text-app-text-muted">
+                (receita total:
+                {{ mealFormSelectedRecipe.yieldQuantity }}
+                {{ mealFormSelectedRecipe.yieldUnit }})</span
+              >
+            </label>
+            <InputNumber
+              id="meal-recipe-qty"
+              v-model="mealForm.recipeConsumedQty"
+              :min="0.01"
+              :max-fraction-digits="2"
+              class="w-full"
+              input-class="w-full"
+              :suffix="` ${mealFormSelectedRecipe.yieldUnit}`"
+            />
+            <p
+              class="mt-1.5 m-0 text-[0.6875rem] leading-snug text-app-text-muted-2"
+            >
+              Os nutrientes são calculados na proporção entre o que você comeu e
+              o rendimento total da receita.
+            </p>
+          </div>
+          <div
+            class="rounded-app-sm border border-app-border bg-app-surface/60 px-3 py-2 text-[0.8125rem]"
+          >
+            <span class="text-app-text-muted-2">Prévia: </span>
+            <span class="font-semibold tabular-nums text-app-text"
+              >{{ fmt1(recipeMealPreview.totals.kcal) }} kcal</span
+            >
+            <span class="mx-1 text-app-text-muted">·</span>
+            <span class="tabular-nums text-app-text-muted"
+              >P {{ fmt1(recipeMealPreview.totals.protein) }} g</span
+            >
+            <span class="mx-1 text-app-text-muted">·</span>
+            <span class="tabular-nums text-app-text-muted"
+              >C {{ fmt1(recipeMealPreview.totals.carbs) }} g</span
+            >
+            <span class="mx-1 text-app-text-muted">·</span>
+            <span class="tabular-nums text-app-text-muted"
+              >G {{ fmt1(recipeMealPreview.totals.fat) }} g</span
+            >
+          </div>
+          <div class="border-t border-app-border pt-1">
+            <Button
+              variant="link"
+              class="!h-auto !px-0 py-1 text-teal-400"
+              @click="
+                mealDialogOpen = false;
+                router.push({ name: 'recipes' });
+              "
+            >
+              + Nova receita
+            </Button>
+          </div>
+        </template>
+
         <template v-else-if="mealForm.mode === 'manual'">
           <div>
             <label
@@ -1654,8 +1968,12 @@ watch(removeWeightDialogOpen, (open) => {
       </div>
     </Dialog>
 
-    <div class="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+6rem)] z-40">
-      <div class="mx-auto flex w-full max-w-[var(--app-shell-max)] justify-end px-4">
+    <div
+      class="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+6rem)] z-40"
+    >
+      <div
+        class="mx-auto flex w-full max-w-[var(--app-shell-max)] justify-end px-4"
+      >
         <SpeedDial
           :model="quickActions"
           direction="up"
@@ -1663,7 +1981,8 @@ watch(removeWeightDialogOpen, (open) => {
             rounded: true,
             severity: 'contrast',
             'aria-label': 'Ações rápidas',
-            class: 'pointer-events-auto !w-14 !h-14 shadow-[0_12px_28px_-12px_rgba(0,0,0,0.75)]',
+            class:
+              'pointer-events-auto !w-14 !h-14 shadow-[0_12px_28px_-12px_rgba(0,0,0,0.75)]',
           }"
           :pt="{
             menu: { class: 'pointer-events-auto' },
@@ -1705,7 +2024,8 @@ watch(removeWeightDialogOpen, (open) => {
     >
       <div class="flex flex-col gap-3">
         <div>
-          <label class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
+          <label
+            class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
             >Nome</label
           >
           <InputText
@@ -1716,7 +2036,8 @@ watch(removeWeightDialogOpen, (open) => {
         </div>
         <div class="grid grid-cols-2 gap-2">
           <div>
-            <label class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
+            <label
+              class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
               >Quantidade</label
             >
             <InputNumber
@@ -1727,7 +2048,8 @@ watch(removeWeightDialogOpen, (open) => {
             />
           </div>
           <div>
-            <label class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
+            <label
+              class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
               >Unidade</label
             >
             <InputText
@@ -1738,7 +2060,8 @@ watch(removeWeightDialogOpen, (open) => {
           </div>
         </div>
         <div>
-          <label class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
+          <label
+            class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
             >Calorias</label
           >
           <InputNumber

@@ -303,9 +303,12 @@ function stepActiveClass(i) {
 
 <template>
   <div
-    class="relative flex h-full min-h-0 flex-col bg-[linear-gradient(165deg,var(--app-bg)_0%,var(--app-bg-surface)_45%,#0e1419_100%)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-slate-100"
+    class="relative flex h-full min-h-0 flex-col overflow-hidden bg-[linear-gradient(165deg,var(--app-bg)_0%,var(--app-bg-surface)_45%,#0e1419_100%)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-slate-100"
   >
-    <div class="pointer-events-none absolute inset-0 z-0" aria-hidden="true">
+    <div
+      class="pointer-events-none absolute inset-0 z-0"
+      aria-hidden="true"
+    >
       <div
         class="absolute -right-20 -top-[120px] h-80 w-80 rounded-full bg-teal-400/12 blur-[80px] opacity-40"
       />

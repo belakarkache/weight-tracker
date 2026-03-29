@@ -45,7 +45,7 @@ function onUpdate(message) {
 
 <template>
   <div
-    class="app-container mx-auto h-full min-h-0 w-full max-w-[var(--app-shell-max)] overflow-y-auto"
+    class="app-container mx-auto w-full max-w-[var(--app-shell-max)]"
   >
     <router-view />
     <Toast

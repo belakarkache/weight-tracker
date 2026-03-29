@@ -1,6 +1,7 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import AppHeader from "../components/AppHeader.vue";
+import AppHeaderStatLink from "../components/AppHeaderStatLink.vue";
 import Button from "primevue/button";
 import DataView from "primevue/dataview";
 import Dialog from "primevue/dialog";
@@ -204,14 +205,20 @@ function confirmRemove() {
 </script>
 
 <template>
-  <div class="app-page flex min-h-full flex-col">
+  <div class="app-page flex h-full min-h-0 flex-col overflow-hidden">
     <AppHeader
       title="Ingredientes"
       subtitle="Organize ingredientes e detalhes nutricionais"
-    />
-    <div class="mx-auto flex w-full flex-1 flex-col px-4 pb-8 pt-4">
+    >
+      <template #actions>
+        <AppHeaderStatLink />
+      </template>
+    </AppHeader>
+    <div
+      class="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 pb-8 pt-4"
+    >
       <section
-        class="flex min-h-0 flex-col gap-4 rounded-app-lg border border-app-border bg-app-surface p-4"
+        class="flex shrink-0 flex-col gap-4 rounded-app-lg border border-app-border bg-app-surface p-4"
       >
         <div class="flex flex-nowrap items-end gap-2 md:flex-wrap md:gap-3">
           <div class="flex min-w-0 flex-1 flex-col gap-2 md:min-w-[14rem]">
@@ -319,7 +326,7 @@ function confirmRemove() {
         <DataView
           :value="filteredIngredients"
           dataKey="id"
-          class="min-h-0 !border-0"
+          class="!border-0"
           :paginator="filteredIngredients.length > 10"
           :rows="10"
           paginatorTemplate="PrevPageLink PageLinks NextPageLink"

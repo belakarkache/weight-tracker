@@ -5,6 +5,7 @@ import { useToast } from "primevue/usetoast";
 import { useOnboarding } from "../composables/useOnboarding";
 import { wipeAllAppLocalStorage } from "../utils/wipeAppStorage";
 import AppHeader from "../components/AppHeader.vue";
+import AppHeaderStatLink from "../components/AppHeaderStatLink.vue";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
 import InputNumber from "primevue/inputnumber";
@@ -160,13 +161,17 @@ onMounted(loadStored);
 </script>
 
 <template>
-  <div class="app-page flex min-h-full flex-col">
+  <div class="app-page flex h-full min-h-0 flex-col overflow-hidden">
     <AppHeader
       title="Perfil"
       subtitle="Ajuste seu perfil para melhorar os cálculos"
-    />
+    >
+      <template #actions>
+        <AppHeaderStatLink />
+      </template>
+    </AppHeader>
     <div
-      class="mx-auto flex w-full max-w-full flex-col gap-5 px-4 pb-[max(9rem,calc(6rem+env(safe-area-inset-bottom)))] pt-4"
+      class="mx-auto flex min-h-0 w-full max-w-full flex-1 flex-col gap-5 overflow-y-auto px-4 pb-[max(9rem,calc(6rem+env(safe-area-inset-bottom)))] pt-4"
     >
       <form
         class="flex flex-col gap-6"

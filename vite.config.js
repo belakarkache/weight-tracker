@@ -35,6 +35,9 @@ const pwaManifest = {
 }
 
 export default defineConfig({
+  server: {
+    allowedHosts: ['.ngrok-free.app', '.ngrok.io', '.ngrok.app'],
+  },
   build: {
     rollupOptions: {
       output: {

@@ -23,6 +23,11 @@ const ROUTE_COPY = {
     description:
       "Biblioteca de alimentos com macros para montar refeições com mais precisão.",
   },
+  recipes: {
+    title: "Receitas",
+    description:
+      "Monte receitas a partir dos ingredientes e registre porções consumidas no dia.",
+  },
   "design-system": {
     title: "Design system",
     description: "Referência interna de componentes e tokens visuais.",
