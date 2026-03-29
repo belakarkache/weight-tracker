@@ -21,7 +21,7 @@ const unit = ref("g");
 const isOpen = ref(false);
 const appDialogStyle = {
   width: "calc(100vw - 2rem)",
-  maxWidth: "430px",
+  maxWidth: "var(--app-dialog-max-width)",
 };
 
 const unitOptions = [

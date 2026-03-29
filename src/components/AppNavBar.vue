@@ -6,6 +6,7 @@ import {
   IconChartBar,
   IconUser,
 } from "@tabler/icons-vue";
+import { hapticLight } from "../composables/useHaptics";
 
 const route = useRoute();
 
@@ -34,10 +35,12 @@ function isActive(item) {
 
 <template>
   <nav
-    class="fixed bottom-0 left-1/2 z-50 w-full max-w-[430px] -translate-x-1/2 px-3 pt-2"
+    class="fixed bottom-0 left-1/2 z-50 w-full max-w-[var(--app-shell-max)] -translate-x-1/2 px-3 pt-2"
     aria-label="Navegação principal"
     style="
       padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+      padding-left: max(0.75rem, env(safe-area-inset-left));
+      padding-right: max(0.75rem, env(safe-area-inset-right));
       background: color-mix(in srgb, var(--app-bg-surface) 92%, transparent);
       border-top: 1px solid var(--app-border);
       backdrop-filter: blur(12px);
@@ -50,6 +53,7 @@ function isActive(item) {
           :key="item.name"
           :to="item.path"
           class="group relative flex flex-1 flex-col items-center justify-center gap-1 min-w-0 rounded-2xl px-2 py-2.5 text-[0.6875rem] font-semibold tracking-wide transition-all duration-300 ease-out focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--app-focus-border)] focus-visible:outline-offset-2 overflow-hidden"
+          @click="hapticLight"
           :class="
             isActive(item)
               ? [

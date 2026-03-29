@@ -13,6 +13,7 @@ import RadioButton from "primevue/radiobutton";
 import InfoNotice from "../components/InfoNotice.vue";
 import HighlightNotice from "../components/HighlightNotice.vue";
 import { useOnboarding } from "../composables/useOnboarding";
+import { hapticLight, hapticSuccess } from "../composables/useHaptics";
 import {
   IconRuler,
   IconScale,
@@ -41,6 +42,7 @@ const showIntro = ref(true);
 const currentStep = ref(0);
 
 function startOnboarding() {
+  hapticLight();
   showIntro.value = false;
 }
 const totalSteps = 7;
@@ -145,8 +147,10 @@ function next() {
   if (!canProceed.value && currentStep.value < 6) return;
   persistStep();
   if (currentStep.value < totalSteps - 1) {
+    hapticLight();
     currentStep.value++;
   } else {
+    hapticSuccess();
     complete(form.value);
     router.replace({ name: "today" });
   }
@@ -179,7 +183,10 @@ function onStepInputEnter(e) {
 }
 
 function prev() {
-  if (currentStep.value > 0) currentStep.value--;
+  if (currentStep.value > 0) {
+    hapticLight();
+    currentStep.value--;
+  }
 }
 
 function idealWeightRange(heightCm) {

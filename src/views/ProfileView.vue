@@ -3,6 +3,8 @@ import { ref, computed, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { useToast } from "primevue/usetoast";
 import { useOnboarding } from "../composables/useOnboarding";
+import { wipeAllAppLocalStorage } from "../utils/wipeAppStorage";
+import { hapticLight, hapticMedium } from "../composables/useHaptics";
 import AppHeader from "../components/AppHeader.vue";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
@@ -24,7 +26,7 @@ import {
 
 const router = useRouter();
 const toast = useToast();
-const { getStored, save, clear } = useOnboarding();
+const { getStored, save } = useOnboarding();
 
 const form = ref({
   height: null,
@@ -93,7 +95,7 @@ const isFormComplete = computed(() => {
 const isClearDialogOpen = ref(false);
 const appDialogStyle = {
   width: "calc(100vw - 2rem)",
-  maxWidth: "430px",
+  maxWidth: "var(--app-dialog-max-width)",
 };
 
 function loadStored() {
@@ -131,6 +133,7 @@ function submit() {
     calorieDeficit: form.value.calorieDeficit,
     goalWeight: form.value.goalWeight,
   });
+  hapticLight();
   toast.add({
     group: "pwa",
     severity: "success",
@@ -151,7 +154,8 @@ function closeClearConfirm() {
 
 function confirmClear() {
   isClearDialogOpen.value = false;
-  clear();
+  hapticMedium();
+  wipeAllAppLocalStorage();
   router.replace({ name: "onboarding" });
 }
 
@@ -351,7 +355,7 @@ onMounted(loadStored);
 
       <div class="flex justify-stretch">
         <Button
-          label="Remover dados cadastrados"
+          label="Apagar todos os dados"
           outlined
           severity="danger"
           class="flex-1"
@@ -373,13 +377,14 @@ onMounted(loadStored);
       position="bottom"
       :draggable="false"
       class="app-dialog"
-      header="Remover dados cadastrados"
+      header="Remover todos os dados"
       :style="appDialogStyle"
     >
       <div class="flex flex-col gap-4">
         <p class="m-0 text-sm leading-relaxed text-app-text">
-          Todos os seus dados de perfil serão excluídos e você voltará à
-          configuração de perfil. Deseja continuar?
+          Serão apagados o perfil, ingredientes, refeições, pesagens e qualquer
+          outro registro guardado neste aparelho. Esta ação não pode ser
+          desfeita. Você voltará à configuração inicial. Deseja continuar?
         </p>
         <div class="flex justify-end gap-2 pt-2">
           <Button

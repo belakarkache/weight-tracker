@@ -33,6 +33,7 @@ import {
   dayTotals,
 } from "../composables/useDailyLog";
 import { dailyCalorieTarget, scaleIngredientMacros } from "../utils/nutrition";
+import { hapticLight, hapticSuccess } from "../composables/useHaptics";
 
 const router = useRouter();
 const toast = useToast();
@@ -161,7 +162,7 @@ const quickActions = computed(() => [
 const ringCircumference = 2 * Math.PI * 40;
 const todayDialogStyle = {
   width: "calc(100vw - 2rem)",
-  maxWidth: "430px",
+  maxWidth: "var(--app-dialog-max-width)",
 };
 
 const ringOffset = computed(() => {
@@ -395,6 +396,7 @@ const mealFormValid = computed(() => {
 });
 
 function openMealCreate() {
+  hapticLight();
   refreshIngredients();
   editingMealId.value = null;
   mealRecordedAtPreserve.value = null;
@@ -412,6 +414,7 @@ function openMealCreate() {
 }
 
 function openQuickIngredientDialog() {
+  hapticLight();
   quickIngredientForm.value = {
     name: "",
     quantity: 100,
@@ -449,6 +452,7 @@ function saveQuickIngredient() {
     };
   }
   quickIngredientDialogOpen.value = false;
+  hapticLight();
 }
 
 function openMealEdit(meal) {
@@ -534,6 +538,7 @@ function saveMeal() {
   }
 
   mealDialogOpen.value = false;
+  hapticSuccess();
   toast.add({
     group: "pwa",
     severity: "success",
@@ -577,6 +582,7 @@ const weightFormValid = computed(
 );
 
 function openWeightDialog() {
+  hapticLight();
   weightForm.value = {
     kg: displayWeight.value?.kg ?? profile.value.weight ?? null,
   };
@@ -601,6 +607,7 @@ function saveWeight() {
     recordedAt: new Date().toISOString(),
   });
   weightDialogOpen.value = false;
+  hapticSuccess();
   toast.add({
     group: "pwa",
     severity: "success",
@@ -1656,7 +1663,7 @@ watch(removeWeightDialogOpen, (open) => {
     </Dialog>
 
     <div class="pointer-events-none fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+6rem)] z-40">
-      <div class="mx-auto flex w-full max-w-[430px] justify-end px-4">
+      <div class="mx-auto flex w-full max-w-[var(--app-shell-max)] justify-end px-4">
         <SpeedDial
           :model="quickActions"
           direction="up"
