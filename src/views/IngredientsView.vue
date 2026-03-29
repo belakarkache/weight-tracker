@@ -17,7 +17,6 @@ import {
   IconCheck,
 } from "@tabler/icons-vue";
 import { useIngredients } from "../composables/useIngredients";
-import { hapticLight } from "../composables/useHaptics";
 import InfoNotice from "../components/InfoNotice.vue";
 
 const { getStored, upsert, remove, removeMany } = useIngredients();
@@ -114,7 +113,6 @@ function closeBulkRemoveDialog() {
 
 function confirmBulkRemove() {
   if (!selectedIds.value.length) return;
-  hapticLight();
   removeMany([...selectedIds.value]);
   clearSelection();
   refresh();
@@ -141,7 +139,6 @@ watch(
 );
 
 function openCreate() {
-  hapticLight();
   editingId.value = null;
   form.value = {
     name: "",
@@ -156,7 +153,6 @@ function openCreate() {
 }
 
 function openEdit(row) {
-  hapticLight();
   editingId.value = row.id;
   form.value = {
     name: row.name ?? "",
@@ -185,7 +181,6 @@ function saveIngredient() {
   });
   refresh();
   isDialogOpen.value = false;
-  hapticLight();
 }
 
 function openRemoveDialog(row) {
@@ -200,7 +195,6 @@ function closeRemoveDialog() {
 
 function confirmRemove() {
   if (!removingIngredient.value) return;
-  hapticLight();
   const id = removingIngredient.value.id;
   remove(id);
   selectedIds.value = selectedIds.value.filter((x) => x !== id);

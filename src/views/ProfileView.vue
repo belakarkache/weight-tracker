@@ -4,7 +4,6 @@ import { useRouter } from "vue-router";
 import { useToast } from "primevue/usetoast";
 import { useOnboarding } from "../composables/useOnboarding";
 import { wipeAllAppLocalStorage } from "../utils/wipeAppStorage";
-import { hapticLight, hapticMedium } from "../composables/useHaptics";
 import AppHeader from "../components/AppHeader.vue";
 import Button from "primevue/button";
 import Dialog from "primevue/dialog";
@@ -133,7 +132,6 @@ function submit() {
     calorieDeficit: form.value.calorieDeficit,
     goalWeight: form.value.goalWeight,
   });
-  hapticLight();
   toast.add({
     group: "pwa",
     severity: "success",
@@ -154,7 +152,6 @@ function closeClearConfirm() {
 
 function confirmClear() {
   isClearDialogOpen.value = false;
-  hapticMedium();
   wipeAllAppLocalStorage();
   router.replace({ name: "onboarding" });
 }
@@ -163,12 +160,14 @@ onMounted(loadStored);
 </script>
 
 <template>
-  <div class="app-page min-h-full flex flex-col">
+  <div class="app-page flex min-h-full flex-col">
     <AppHeader
       title="Perfil"
       subtitle="Ajuste seu perfil para melhorar os cálculos"
     />
-    <div class="flex flex-1 flex-col gap-5 px-4 pb-8 pt-4 w-full mx-auto">
+    <div
+      class="mx-auto flex w-full max-w-full flex-col gap-5 px-4 pb-[max(9rem,calc(6rem+env(safe-area-inset-bottom)))] pt-4"
+    >
       <form
         class="flex flex-col gap-6"
         @submit.prevent="submit"

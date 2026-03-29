@@ -4,7 +4,7 @@ import AppNavBar from "../components/AppNavBar.vue";
 
 <template>
   <div
-    class="app-layout flex flex-col min-h-screen"
+    class="app-layout flex min-h-full flex-col"
     style="
       background: var(--app-bg);
       background-image: radial-gradient(
@@ -20,7 +20,7 @@ import AppNavBar from "../components/AppNavBar.vue";
     "
   >
     <main
-      class="flex-1"
+      class="min-h-0 flex-1"
       style="padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));"
     >
       <router-view />

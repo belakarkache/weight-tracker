@@ -33,8 +33,6 @@ import {
   dayTotals,
 } from "../composables/useDailyLog";
 import { dailyCalorieTarget, scaleIngredientMacros } from "../utils/nutrition";
-import { hapticLight, hapticSuccess } from "../composables/useHaptics";
-
 const router = useRouter();
 const toast = useToast();
 const { getStored: getProfile, save: saveProfile } = useOnboarding();
@@ -396,7 +394,6 @@ const mealFormValid = computed(() => {
 });
 
 function openMealCreate() {
-  hapticLight();
   refreshIngredients();
   editingMealId.value = null;
   mealRecordedAtPreserve.value = null;
@@ -414,7 +411,6 @@ function openMealCreate() {
 }
 
 function openQuickIngredientDialog() {
-  hapticLight();
   quickIngredientForm.value = {
     name: "",
     quantity: 100,
@@ -452,7 +448,6 @@ function saveQuickIngredient() {
     };
   }
   quickIngredientDialogOpen.value = false;
-  hapticLight();
 }
 
 function openMealEdit(meal) {
@@ -538,7 +533,6 @@ function saveMeal() {
   }
 
   mealDialogOpen.value = false;
-  hapticSuccess();
   toast.add({
     group: "pwa",
     severity: "success",
@@ -582,7 +576,6 @@ const weightFormValid = computed(
 );
 
 function openWeightDialog() {
-  hapticLight();
   weightForm.value = {
     kg: displayWeight.value?.kg ?? profile.value.weight ?? null,
   };
@@ -607,7 +600,6 @@ function saveWeight() {
     recordedAt: new Date().toISOString(),
   });
   weightDialogOpen.value = false;
-  hapticSuccess();
   toast.add({
     group: "pwa",
     severity: "success",

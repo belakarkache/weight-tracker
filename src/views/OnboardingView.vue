@@ -13,7 +13,6 @@ import RadioButton from "primevue/radiobutton";
 import InfoNotice from "../components/InfoNotice.vue";
 import HighlightNotice from "../components/HighlightNotice.vue";
 import { useOnboarding } from "../composables/useOnboarding";
-import { hapticLight, hapticSuccess } from "../composables/useHaptics";
 import {
   IconRuler,
   IconScale,
@@ -42,7 +41,6 @@ const showIntro = ref(true);
 const currentStep = ref(0);
 
 function startOnboarding() {
-  hapticLight();
   showIntro.value = false;
 }
 const totalSteps = 7;
@@ -147,10 +145,8 @@ function next() {
   if (!canProceed.value && currentStep.value < 6) return;
   persistStep();
   if (currentStep.value < totalSteps - 1) {
-    hapticLight();
     currentStep.value++;
   } else {
-    hapticSuccess();
     complete(form.value);
     router.replace({ name: "today" });
   }
@@ -184,7 +180,6 @@ function onStepInputEnter(e) {
 
 function prev() {
   if (currentStep.value > 0) {
-    hapticLight();
     currentStep.value--;
   }
 }
@@ -308,7 +303,7 @@ function stepActiveClass(i) {
 
 <template>
   <div
-    class="relative flex min-h-screen flex-col overflow-hidden bg-[linear-gradient(165deg,var(--app-bg)_0%,var(--app-bg-surface)_45%,#0e1419_100%)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-slate-100"
+    class="relative flex h-full min-h-0 flex-col bg-[linear-gradient(165deg,var(--app-bg)_0%,var(--app-bg-surface)_45%,#0e1419_100%)] pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)] text-slate-100"
   >
     <div class="pointer-events-none absolute inset-0 z-0" aria-hidden="true">
       <div
@@ -324,7 +319,7 @@ function stepActiveClass(i) {
 
     <main
       v-if="showIntro"
-      class="relative flex-1 overflow-auto px-4 sm:px-6 py-6 pt-8 flex flex-col items-center justify-center min-h-0"
+      class="relative flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto px-4 py-6 pt-8 sm:px-6"
     >
       <div class="intro-content max-w-md mx-auto w-full text-center space-y-6">
         <div
@@ -362,7 +357,9 @@ function stepActiveClass(i) {
     </main>
 
     <template v-else>
-      <main class="relative flex-1 overflow-auto px-4 sm:px-6 py-6 pt-8">
+      <main
+        class="relative flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6 pt-8 sm:px-6"
+      >
         <Stepper
           v-model="currentStep"
           :linear="true"
@@ -750,7 +747,7 @@ function stepActiveClass(i) {
       </main>
 
       <footer
-        class="relative border-t border-app-border bg-[color-mix(in_srgb,var(--app-bg-surface)_85%,transparent)] pt-4 pb-4 pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] backdrop-blur-sm sm:pt-6 sm:pb-6 sm:pl-[max(1.5rem,env(safe-area-inset-left))] sm:pr-[max(1.5rem,env(safe-area-inset-right))]"
+        class="relative shrink-0 border-t border-app-border bg-[color-mix(in_srgb,var(--app-bg-surface)_85%,transparent)] pt-4 pb-[max(1rem,calc(0.75rem+env(safe-area-inset-bottom)))] pl-[max(1.25rem,env(safe-area-inset-left))] pr-[max(1.25rem,env(safe-area-inset-right))] backdrop-blur-sm sm:pt-6 sm:pb-[max(1.25rem,calc(1rem+env(safe-area-inset-bottom)))] sm:pl-[max(1.5rem,env(safe-area-inset-left))] sm:pr-[max(1.5rem,env(safe-area-inset-right))]"
       >
         <div class="flex gap-3 justify-end">
           <Button
