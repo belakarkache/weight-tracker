@@ -26,7 +26,6 @@ import MultiSelect from "primevue/multiselect";
 import Select from "primevue/select";
 import SpeedDial from "primevue/speeddial";
 import AppHeader from "../components/AppHeader.vue";
-import AppHeaderStatLink from "../components/AppHeaderStatLink.vue";
 import InfoNotice from "../components/InfoNotice.vue";
 import { useOnboarding } from "../composables/useOnboarding";
 import { useIngredients } from "../composables/useIngredients";
@@ -65,6 +64,23 @@ const profile = computed(() => {
 });
 
 const dayKey = computed(() => dateKeyFromDate(selectedDate.value) ?? "");
+
+const dayKeysWithWeightLog = computed(() => {
+  const set = new Set();
+  for (const [key, data] of Object.entries(dailyLog.entries.value ?? {})) {
+    if (Array.isArray(data?.weights) && data.weights.length > 0) {
+      set.add(key);
+    }
+  }
+  return set;
+});
+
+function calendarDateHasWeight(calMeta) {
+  const key = dateKeyFromDate(
+    new Date(calMeta.year, calMeta.month, calMeta.day),
+  );
+  return key != null && dayKeysWithWeightLog.value.has(key);
+}
 
 const daySnapshot = computed(() => {
   const dk = dayKey.value;
@@ -891,9 +907,6 @@ watch(removeWeightDialogOpen, (open) => {
     class="app-page relative flex h-full min-h-0 flex-col overflow-hidden text-slate-100"
   >
     <AppHeader :subtitle="headerSubtitle">
-      <template #actions>
-        <AppHeaderStatLink />
-      </template>
       <template #title>
         <div class="flex min-w-0 flex-wrap items-center gap-2">
           <button
@@ -932,7 +945,20 @@ watch(removeWeightDialogOpen, (open) => {
               @date-select="closeDatePopover"
               @today-click="closeDatePopover"
               @clear-click="onClearDateClick"
-            />
+            >
+              <template #date="{ date: calDate }">
+                <span class="app-datepicker-day-slot">
+                  <span class="app-datepicker-day-num tabular-nums">{{
+                    calDate.day
+                  }}</span>
+                  <span
+                    v-if="calendarDateHasWeight(calDate)"
+                    class="app-datepicker-weight-dot"
+                    aria-hidden="true"
+                  />
+                </span>
+              </template>
+            </DatePicker>
           </Popover>
         </div>
       </template>

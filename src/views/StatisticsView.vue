@@ -2,7 +2,6 @@
 import { computed, onActivated, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import AppHeader from "../components/AppHeader.vue";
-import AppHeaderStatLink from "../components/AppHeaderStatLink.vue";
 import InfoNotice from "../components/InfoNotice.vue";
 import Button from "primevue/button";
 import Divider from "primevue/divider";
@@ -225,9 +224,6 @@ const goalProgress = computed(() => {
       title="Estatísticas"
       subtitle="Acompanhe sua evolução ao longo do tempo"
     >
-      <template #actions>
-        <AppHeaderStatLink />
-      </template>
     </AppHeader>
     <div
       class="mx-auto flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-24 pt-4"

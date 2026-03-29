@@ -2,7 +2,6 @@
 import { computed, nextTick, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import AppHeader from "../components/AppHeader.vue";
-import AppHeaderStatLink from "../components/AppHeaderStatLink.vue";
 import Button from "primevue/button";
 import DataView from "primevue/dataview";
 import Dialog from "primevue/dialog";
@@ -251,9 +250,6 @@ function confirmRemove() {
       subtitle="Combine ingredientes em receitas e use porções"
       subtitle-class="!text-[0.75rem] !leading-tight"
     >
-      <template #actions>
-        <AppHeaderStatLink />
-      </template>
     </AppHeader>
 
     <div

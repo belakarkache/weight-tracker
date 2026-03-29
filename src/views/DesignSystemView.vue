@@ -1,7 +1,6 @@
 <script setup>
 import { ref } from "vue";
 import AppHeader from "../components/AppHeader.vue";
-import AppHeaderStatLink from "../components/AppHeaderStatLink.vue";
 import Button from "primevue/button";
 import InputText from "primevue/inputtext";
 import InputNumber from "primevue/inputnumber";
@@ -56,9 +55,6 @@ const palette = [
       title="Design System (teste)"
       subtitle="Tela temporária para validar estilos e componentes"
     >
-      <template #actions>
-        <AppHeaderStatLink />
-      </template>
     </AppHeader>
 
     <div class="ds-page ds-stack min-h-0 flex-1 overflow-y-auto">

@@ -1,7 +1,6 @@
 <script setup>
 import { computed, ref, watch } from "vue";
 import AppHeader from "../components/AppHeader.vue";
-import AppHeaderStatLink from "../components/AppHeaderStatLink.vue";
 import Button from "primevue/button";
 import DataView from "primevue/dataview";
 import Dialog from "primevue/dialog";
@@ -210,9 +209,6 @@ function confirmRemove() {
       title="Ingredientes"
       subtitle="Organize ingredientes e detalhes nutricionais"
     >
-      <template #actions>
-        <AppHeaderStatLink />
-      </template>
     </AppHeader>
     <div
       class="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 pb-8 pt-4"

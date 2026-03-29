@@ -974,16 +974,53 @@
 }
 
 .app-today-datepicker .p-datepicker-day {
+  position: relative !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
   width: 2.125rem !important;
   height: 2.125rem !important;
   min-width: 2.125rem !important;
   min-height: 2.125rem !important;
+  padding: 0 !important;
   font-size: 0.8125rem !important;
   font-weight: 500 !important;
   color: var(--app-text) !important;
   border: 1px solid transparent !important;
   border-radius: var(--app-radius-sm) !important;
   background: transparent !important;
+  overflow: visible !important;
+}
+
+.app-today-datepicker .app-datepicker-day-slot {
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  line-height: 1 !important;
+}
+
+.app-today-datepicker .app-datepicker-day-num {
+  line-height: 1 !important;
+}
+
+.app-today-datepicker .app-datepicker-weight-dot {
+  position: absolute !important;
+  bottom: 4px !important;
+  left: 50% !important;
+  z-index: 1 !important;
+  width: 4px !important;
+  height: 4px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;
+  background: var(--accent-teal) !important;
+  box-shadow: 0 0 4px
+    color-mix(in srgb, var(--accent-teal) 70%, transparent) !important;
+  pointer-events: none !important;
+  transform: translateX(-50%) !important;
 }
 
 .app-today-datepicker
