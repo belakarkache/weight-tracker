@@ -36,17 +36,19 @@ const nutrition = computed(() =>
   computeNutritionAverages(dailyLog.entries.value),
 );
 
-const journeyLabel = computed(() => {
-  const w = weightStats.value;
-  if (!w) return "";
-  const d = w.journeyDays === 1 ? "dia" : "dias";
-  const m = w.journeyMonths === 1 ? "mês" : "meses";
-  return `${w.journeyDays} ${d}; ${w.journeyMonths} ${m}`;
-});
-
 const chartPoints = computed(() =>
   weightSeriesToChartPoints(weightSeries.value),
 );
+
+const chartKgRange = computed(() => {
+  const s = weightSeries.value;
+  if (!s.length) return null;
+  const kgs = s.map((p) => p.kg);
+  return {
+    min: Math.min(...kgs),
+    max: Math.max(...kgs),
+  };
+});
 
 const chartPolyline = computed(() => {
   const pts = chartPoints.value;
@@ -196,7 +198,7 @@ function fmtSignedKgPerWeek(delta) {
                 Tempo de jornada (aprox.)
               </dt>
               <dd class="mt-1 m-0 text-base font-semibold text-app-text">
-                {{ journeyLabel }}
+                {{ weightStats.journeyLabel }}
               </dd>
             </div>
           </dl>
@@ -280,6 +282,13 @@ function fmtSignedKgPerWeek(delta) {
                 />
               </g>
             </svg>
+            <p
+              v-if="chartKgRange"
+              class="m-0 mt-2 text-center text-[0.6875rem] text-app-text-muted-2 tabular-nums"
+            >
+              Escala aprox.: {{ fmt1(chartKgRange.min) }} kg (mín.) —
+              {{ fmt1(chartKgRange.max) }} kg (máx.)
+            </p>
           </div>
         </section>
 
