@@ -57,21 +57,36 @@ export function useRecipes() {
   const upsert = (payload) => {
     const current = getStored();
     const existingId = payload?.id;
-    const idx = existingId ? current.findIndex((r) => r.id === existingId) : -1;
+    let idx = existingId ? current.findIndex((r) => r.id === existingId) : -1;
+
+    if (idx < 0 && !existingId) {
+      const key = (payload?.name ?? "").trim();
+      if (key) {
+        idx = current.findIndex(
+          (r) =>
+            (r.name ?? "")
+              .trim()
+              .localeCompare(key, "pt-BR", { sensitivity: "base" }) === 0,
+        );
+      }
+    }
 
     if (idx >= 0) {
       const next = normalizeRecipe({
         ...current[idx],
         ...payload,
+        id: current[idx].id,
         updatedAt: new Date().toISOString(),
       });
       const updated = current.slice();
       updated[idx] = next;
-      return saveAll(updated.sort(sortByName));
+      saveAll(updated.sort(sortByName));
+      return next;
     }
 
     const next = normalizeRecipe(payload);
-    return saveAll([...current, next].sort(sortByName));
+    saveAll([...current, next].sort(sortByName));
+    return next;
   };
 
   const remove = (id) => {

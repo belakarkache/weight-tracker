@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import AppHeader from "../components/AppHeader.vue";
 import Button from "primevue/button";
@@ -9,22 +9,36 @@ import InputText from "primevue/inputtext";
 import InputNumber from "primevue/inputnumber";
 import Select from "primevue/select";
 import MultiSelect from "primevue/multiselect";
+import Checkbox from "primevue/checkbox";
 import {
   IconPlus,
   IconPencil,
   IconTrash,
-  IconChefHat,
+  IconSquaresSelected,
+  IconCheck,
+  IconInfoCircle,
 } from "@tabler/icons-vue";
+import InfoNotice from "../components/InfoNotice.vue";
 import { useIngredients } from "../composables/useIngredients";
 import { useRecipes } from "../composables/useRecipes";
+import { useTacoIngredients } from "../composables/useTacoIngredients";
 import { computeRecipeFullTotals } from "../utils/recipes";
-import InfoNotice from "../components/InfoNotice.vue";
-
+import {
+  buildIngredientLookupMap,
+  mergeIngredientOptionsWindowed,
+  MULTISELECT_VIRTUAL_ITEM_SIZE,
+} from "../utils/tacoReferenceFoods";
 const router = useRouter();
 const { getStored: getIngredients } = useIngredients();
-const { getStored: getRecipes, upsert, remove } = useRecipes();
+const { getStored: getRecipes, upsert, remove, removeMany } = useRecipes();
+const {
+  tacoList,
+  loading: tacoLoading,
+  loaded: tacoLoaded,
+  ensureLoaded: ensureTacoLoaded,
+} = useTacoIngredients();
 
-const ingredients = ref(getIngredients());
+const storedIngredients = ref(getIngredients());
 const recipes = ref(getRecipes());
 const query = ref("");
 
@@ -35,6 +49,9 @@ const unitOptions = [
 ];
 
 const isDialogOpen = ref(false);
+const isBulkRemoveDialogOpen = ref(false);
+const selectedIds = ref([]);
+const isBulkMode = ref(false);
 const editingId = ref(null);
 const yieldLockedByUser = ref(false);
 let syncingYieldFromIngredients = false;
@@ -46,8 +63,35 @@ const form = ref({
   lineQuantities: {},
 });
 
+const recipeIngredientFilter = ref("");
+let recipeIngredientFilterTimer = null;
+function onRecipeIngredientFilter(ev) {
+  const v = ev?.value ?? "";
+  clearTimeout(recipeIngredientFilterTimer);
+  recipeIngredientFilterTimer = setTimeout(() => {
+    recipeIngredientFilter.value = v;
+  }, 120);
+}
+
+const recipeIngredientVirtualOpts = {
+  itemSize: MULTISELECT_VIRTUAL_ITEM_SIZE,
+};
+
+const recipeIngredientMsLoading = computed(
+  () => tacoLoading.value && isDialogOpen.value && !tacoLoaded.value,
+);
+
+const ingredients = computed(() =>
+  mergeIngredientOptionsWindowed(
+    storedIngredients.value,
+    tacoList.value,
+    form.value.ingredientIds,
+    recipeIngredientFilter.value,
+  ),
+);
+
 const ingredientMap = computed(() =>
-  Object.fromEntries(ingredients.value.map((i) => [i.id, i])),
+  buildIngredientLookupMap(storedIngredients.value, tacoList.value),
 );
 
 const isEditing = computed(() => !!editingId.value);
@@ -119,15 +163,77 @@ const isFormValid = computed(() => {
   return effectiveYieldQuantity.value > 0;
 });
 
+const selectedCount = computed(() => selectedIds.value.length);
+
+const selectAllFilteredLabel = computed(() =>
+  query.value.trim() ? "Selecionar todos da busca" : "Selecionar todos",
+);
+
 const appDialogStyle = {
   width: "calc(100vw - 2rem)",
   maxWidth: "var(--app-dialog-max-width)",
 };
 
 function refresh() {
-  ingredients.value = getIngredients();
+  storedIngredients.value = getIngredients();
   recipes.value = getRecipes();
+  const valid = new Set(recipes.value.map((r) => r.id));
+  selectedIds.value = selectedIds.value.filter((id) => valid.has(id));
 }
+
+function setItemSelected(id, checked) {
+  if (checked) {
+    if (!selectedIds.value.includes(id)) {
+      selectedIds.value = [...selectedIds.value, id];
+    }
+  } else {
+    selectedIds.value = selectedIds.value.filter((x) => x !== id);
+  }
+}
+
+function selectAllFiltered() {
+  selectedIds.value = filteredRecipes.value.map((r) => r.id);
+}
+
+function clearSelection() {
+  selectedIds.value = [];
+}
+
+function openBulkRemoveDialog() {
+  if (!selectedIds.value.length) return;
+  isBulkRemoveDialogOpen.value = true;
+}
+
+function closeBulkRemoveDialog() {
+  isBulkRemoveDialogOpen.value = false;
+}
+
+function confirmBulkRemove() {
+  if (!selectedIds.value.length) return;
+  removeMany([...selectedIds.value]);
+  clearSelection();
+  refresh();
+  closeBulkRemoveDialog();
+}
+
+function toggleBulkMode() {
+  if (isBulkMode.value) {
+    isBulkMode.value = false;
+    clearSelection();
+  } else {
+    isBulkMode.value = true;
+  }
+}
+
+watch(
+  () => recipes.value.length,
+  (n) => {
+    if (n === 0) {
+      isBulkMode.value = false;
+      selectedIds.value = [];
+    }
+  },
+);
 
 watch(
   () => form.value.ingredientIds,
@@ -150,6 +256,19 @@ watch(
   { deep: true },
 );
 
+onMounted(() => {
+  void ensureTacoLoaded();
+});
+
+watch(isDialogOpen, (open) => {
+  if (open) {
+    void ensureTacoLoaded();
+  } else {
+    recipeIngredientFilter.value = "";
+    clearTimeout(recipeIngredientFilterTimer);
+  }
+});
+
 watch(
   [suggestedYield, yieldLockedByUser, isEditing, isDialogOpen],
   async () => {
@@ -171,6 +290,7 @@ watch(
 );
 
 function openCreate() {
+  void ensureTacoLoaded();
   editingId.value = null;
   yieldLockedByUser.value = false;
   form.value = {
@@ -184,6 +304,7 @@ function openCreate() {
 }
 
 function openEdit(row) {
+  void ensureTacoLoaded();
   editingId.value = row.id;
   yieldLockedByUser.value = true;
   const ids = (row.lines ?? []).map((l) => l.ingredientId).filter(Boolean);
@@ -236,7 +357,10 @@ function openRemove(row) {
 }
 
 function confirmRemove() {
-  if (removing.value?.id) remove(removing.value.id);
+  if (!removing.value?.id) return;
+  const id = removing.value.id;
+  remove(id);
+  selectedIds.value = selectedIds.value.filter((x) => x !== id);
   refresh();
   removeOpen.value = false;
   removing.value = null;
@@ -258,8 +382,8 @@ function confirmRemove() {
       <section
         class="flex shrink-0 flex-col gap-4 rounded-app-lg border border-app-border bg-app-surface p-4"
       >
-        <div class="flex flex-nowrap items-end gap-2">
-          <div class="min-w-0 flex-1 flex flex-col gap-2">
+        <div class="flex flex-nowrap items-end gap-2 md:flex-wrap md:gap-3">
+          <div class="flex min-w-0 flex-1 flex-col gap-2 md:min-w-[14rem]">
             <label
               for="recipes-search"
               class="text-[0.8125rem] font-medium text-app-text-muted-2"
@@ -273,50 +397,121 @@ function confirmRemove() {
             />
           </div>
           <Button
+            v-if="recipes.length"
             class="shrink-0"
+            severity="secondary"
+            outlined
             size="small"
-            :disabled="!ingredients.length"
+            :title="
+              isBulkMode
+                ? 'Sair do modo seleção em lote'
+                : 'Selecionar e excluir várias receitas'
+            "
+            :aria-pressed="isBulkMode"
+            :aria-label="
+              isBulkMode ? 'Concluir seleção em lote' : 'Ativar seleção em lote'
+            "
+            @click="toggleBulkMode"
+          >
+            <template #icon>
+              <IconSquaresSelected
+                v-if="!isBulkMode"
+                class="size-5"
+                stroke-width="1.5"
+              />
+              <IconCheck
+                v-else
+                class="size-5"
+                stroke-width="1.5"
+              />
+            </template>
+          </Button>
+          <Button
+            class="shrink-0"
+            severity="primary"
+            aria-label="Nova receita"
+            size="small"
             @click="openCreate"
           >
             <template #icon>
               <IconPlus
-                class="size-4"
-                stroke-width="2"
+                class="size-5"
+                stroke-width="1.5"
               />
             </template>
           </Button>
         </div>
 
-        <p
-          v-if="!ingredients.length"
-          class="m-0 rounded-app-sm border border-dashed border-app-border bg-app-elevated/40 p-3 text-[0.8125rem] text-app-text-muted"
+        <div
+          v-if="isBulkMode && recipes.length"
+          class="flex flex-wrap items-center gap-2 border-t border-app-border pt-3"
         >
-          Cadastre ingredientes em
-          <button
-            type="button"
-            class="font-semibold text-teal-400 underline-offset-2 hover:underline"
-            @click="router.push({ name: 'ingredients' })"
+          <Button
+            severity="secondary"
+            outlined
+            size="small"
+            class="shrink-0"
+            :disabled="!filteredRecipes.length"
+            @click="selectAllFiltered"
           >
-            Ingredientes
-          </button>
-          antes de criar receitas.
-        </p>
+            {{ selectAllFilteredLabel }}
+          </Button>
+          <Button
+            severity="secondary"
+            outlined
+            size="small"
+            class="shrink-0"
+            :disabled="!selectedCount"
+            @click="clearSelection"
+          >
+            Limpar seleção
+          </Button>
+          <span
+            v-if="selectedCount"
+            class="text-[0.75rem] text-app-text-muted-2 sm:ml-auto"
+          >
+            {{ selectedCount }}
+            {{ selectedCount === 1 ? "selecionada" : "selecionadas" }}
+          </span>
+          <Button
+            severity="danger"
+            outlined
+            size="small"
+            class="shrink-0"
+            :disabled="!selectedCount"
+            @click="openBulkRemoveDialog"
+          >
+            Excluir selecionados
+          </Button>
+        </div>
 
         <DataView
-          v-else
           :value="filteredRecipes"
-          data-key="id"
+          dataKey="id"
           layout="list"
           class="app-recipes-dataview"
         >
           <template #empty>
-            <div
-              class="rounded-app-sm border border-dashed border-app-border bg-app-elevated/30 px-4 py-10 text-center"
-            >
-              <p class="m-0 text-sm text-app-text-muted">
-                Nenhuma receita ainda. Toque em Nova para montar a primeira.
-              </p>
-            </div>
+            <InfoNotice class="mt-1">
+              <template #icon>
+                <IconInfoCircle stroke-width="1.5" />
+              </template>
+              <div class="space-y-1">
+                <p class="m-0 text-sm font-semibold text-app-text">
+                  {{
+                    query
+                      ? "Nenhuma receita encontrada para a busca."
+                      : "Você ainda não cadastrou nenhuma receita."
+                  }}
+                </p>
+                <p
+                  v-if="!query"
+                  class="m-0 text-[0.8125rem] text-app-text-muted"
+                >
+                  Toque no botão “+” para criar sua primeira receita.
+                </p>
+              </div>
+            </InfoNotice>
           </template>
           <template #list="{ items }">
             <div class="flex flex-col gap-2">
@@ -325,6 +520,18 @@ function confirmRemove() {
                 :key="item.id"
                 class="flex gap-3 rounded-app-lg border border-app-border bg-app-elevated/50 p-3"
               >
+                <div
+                  v-if="isBulkMode"
+                  class="flex w-9 shrink-0 items-center justify-center self-stretch"
+                >
+                  <Checkbox
+                    :inputId="'recipe-select-' + item.id"
+                    binary
+                    :modelValue="selectedIds.includes(item.id)"
+                    :aria-label="'Selecionar ' + (item.name || 'receita')"
+                    @update:modelValue="(v) => setItemSelected(item.id, v)"
+                  />
+                </div>
                 <div class="min-w-0 flex-1">
                   <h3
                     class="m-0 text-[0.9375rem] font-semibold leading-snug text-app-text"
@@ -419,12 +626,18 @@ function confirmRemove() {
             id="recipe-ings"
             v-model="form.ingredientIds"
             :options="ingredients"
-            option-label="name"
-            option-value="id"
+            optionLabel="name"
+            optionValue="id"
+            dataKey="id"
             filter
             display="chip"
-            placeholder="Selecionar ingredientes"
+            placeholder="Buscar na TACO ou nos seus ingredientes"
+            filterPlaceholder="Digite para filtrar a lista"
+            scrollHeight="14rem"
+            :virtualScrollerOptions="recipeIngredientVirtualOpts"
+            :loading="recipeIngredientMsLoading"
             class="w-full"
+            @filter="onRecipeIngredientFilter"
           />
         </div>
 
@@ -569,6 +782,42 @@ function confirmRemove() {
           <Button
             severity="danger"
             @click="confirmRemove"
+            >Excluir</Button
+          >
+        </div>
+      </div>
+    </Dialog>
+
+    <Dialog
+      v-model:visible="isBulkRemoveDialogOpen"
+      modal
+      position="bottom"
+      :draggable="false"
+      class="app-dialog"
+      header="Excluir selecionados"
+      :style="appDialogStyle"
+    >
+      <div class="flex flex-col gap-4">
+        <p class="m-0 text-sm leading-relaxed text-app-text">
+          Remover
+          <strong class="text-app-text">{{ selectedCount }}</strong>
+          {{
+            selectedCount === 1
+              ? " receita selecionada"
+              : " receitas selecionadas"
+          }}? Esta ação não pode ser desfeita. Refeições já registradas não são
+          apagadas.
+        </p>
+        <div class="flex justify-end gap-2 pt-2">
+          <Button
+            severity="secondary"
+            outlined
+            @click="closeBulkRemoveDialog"
+            >Cancelar</Button
+          >
+          <Button
+            severity="danger"
+            @click="confirmBulkRemove"
             >Excluir</Button
           >
         </div>

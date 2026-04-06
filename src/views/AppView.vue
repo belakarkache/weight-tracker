@@ -1,5 +1,5 @@
 <script setup>
-import { computed, nextTick, ref, watch } from "vue";
+import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import {
   IconChevronDown,
@@ -26,10 +26,12 @@ import MultiSelect from "primevue/multiselect";
 import Select from "primevue/select";
 import SpeedDial from "primevue/speeddial";
 import AppHeader from "../components/AppHeader.vue";
+import AppHeaderStatLink from "../components/AppHeaderStatLink.vue";
 import InfoNotice from "../components/InfoNotice.vue";
 import { useOnboarding } from "../composables/useOnboarding";
 import { useIngredients } from "../composables/useIngredients";
 import { useRecipes } from "../composables/useRecipes";
+import { useTacoIngredients } from "../composables/useTacoIngredients";
 import {
   useDailyLog,
   dateKeyFromDate,
@@ -37,6 +39,12 @@ import {
 } from "../composables/useDailyLog";
 import { dailyCalorieTarget, scaleIngredientMacros } from "../utils/nutrition";
 import { buildMealFromRecipePortion } from "../utils/recipes";
+import {
+  buildIngredientLookupMap,
+  mergeIngredientOptionsWindowed,
+  MULTISELECT_VIRTUAL_ITEM_SIZE,
+} from "../utils/tacoReferenceFoods";
+import { hasStatsOverviewData } from "../utils/statsAggregates";
 const router = useRouter();
 const toast = useToast();
 const { getStored: getProfile, save: saveProfile } = useOnboarding();
@@ -45,6 +53,17 @@ const { getStored: getIngredients, upsert: upsertIngredient } =
   useIngredients();
 const { getStored: getRecipes } = useRecipes();
 const dailyLog = useDailyLog();
+
+const hasStatsOverview = computed(() =>
+  hasStatsOverviewData(dailyLog.entries.value),
+);
+
+const {
+  tacoList,
+  loading: tacoLoading,
+  loaded: tacoLoaded,
+  ensureLoaded: ensureTacoLoaded,
+} = useTacoIngredients();
 
 const recipesList = ref(getRecipes());
 function refreshRecipes() {
@@ -99,8 +118,6 @@ const expandedMeals = ref({});
 function refreshIngredients() {
   ingredientsList.value = getIngredients();
 }
-
-const ingredientSelectOptions = computed(() => ingredientsList.value);
 
 function toggleMealExpanded(mealId) {
   expandedMeals.value = {
@@ -330,8 +347,35 @@ const mealForm = ref({
   fat: null,
 });
 
+const mealIngredientFilter = ref("");
+let mealIngredientFilterTimer = null;
+function onMealIngredientFilter(ev) {
+  const v = ev?.value ?? "";
+  clearTimeout(mealIngredientFilterTimer);
+  mealIngredientFilterTimer = setTimeout(() => {
+    mealIngredientFilter.value = v;
+  }, 120);
+}
+
+const mealIngredientVirtualOpts = {
+  itemSize: MULTISELECT_VIRTUAL_ITEM_SIZE,
+};
+
+const mealIngredientMsLoading = computed(
+  () => tacoLoading.value && mealDialogOpen.value && !tacoLoaded.value,
+);
+
+const ingredientSelectOptions = computed(() =>
+  mergeIngredientOptionsWindowed(
+    ingredientsList.value,
+    tacoList.value,
+    mealForm.value.ingredientIds,
+    mealIngredientFilter.value,
+  ),
+);
+
 const ingredientMap = computed(() =>
-  Object.fromEntries(ingredientsList.value.map((ing) => [ing.id, ing])),
+  buildIngredientLookupMap(ingredientsList.value, tacoList.value),
 );
 
 const selectedIngredients = computed(() =>
@@ -388,6 +432,12 @@ const ingredientMealEntries = computed(() =>
     })
     .filter((entry) => entry.quantityConsumed > 0),
 );
+
+const quickIngredientUnitOptions = [
+  { label: "Gramas (g)", value: "g" },
+  { label: "Mililitros (ml)", value: "ml" },
+  { label: "Unidade (un)", value: "un" },
+];
 
 const quickIngredientDialogOpen = ref(false);
 const quickIngredientForm = ref({
@@ -480,6 +530,7 @@ const mealFormValid = computed(() => {
 });
 
 function openMealCreate() {
+  void ensureTacoLoaded();
   refreshIngredients();
   refreshRecipes();
   editingMealId.value = null;
@@ -515,8 +566,7 @@ function openQuickIngredientDialog() {
 function saveQuickIngredient() {
   if (!quickIngredientValid.value) return;
   const f = quickIngredientForm.value;
-  const beforeIds = new Set(ingredientsList.value.map((x) => x.id));
-  upsertIngredient({
+  const saved = upsertIngredient({
     name: f.name.trim(),
     quantity: Number(f.quantity),
     unit: f.unit ?? "g",
@@ -526,21 +576,21 @@ function saveQuickIngredient() {
     fat: f.fat != null ? Number(f.fat) : null,
   });
   refreshIngredients();
-  const createdId =
-    ingredientsList.value.find((x) => !beforeIds.has(x.id))?.id ?? null;
-  if (createdId) {
+  const id = saved?.id;
+  if (id) {
     mealForm.value.ingredientIds = [
-      ...new Set([...(mealForm.value.ingredientIds ?? []), createdId]),
+      ...new Set([...(mealForm.value.ingredientIds ?? []), id]),
     ];
     mealForm.value.ingredientQuantities = {
       ...(mealForm.value.ingredientQuantities ?? {}),
-      [createdId]: Number(f.quantity),
+      [id]: Number(f.quantity),
     };
   }
   quickIngredientDialogOpen.value = false;
 }
 
 function openMealEdit(meal) {
+  void ensureTacoLoaded();
   refreshIngredients();
   refreshRecipes();
   editingMealId.value = meal.id;
@@ -869,8 +919,18 @@ function saveWeightGoalDialog() {
   });
 }
 
+onMounted(() => {
+  void ensureTacoLoaded();
+});
+
 watch(mealDialogOpen, (open) => {
-  if (open) refreshIngredients();
+  if (open) {
+    refreshIngredients();
+    void ensureTacoLoaded();
+  } else {
+    mealIngredientFilter.value = "";
+    clearTimeout(mealIngredientFilterTimer);
+  }
 });
 
 watch(
@@ -907,6 +967,12 @@ watch(removeWeightDialogOpen, (open) => {
     class="app-page relative flex h-full min-h-0 flex-col overflow-hidden text-slate-100"
   >
     <AppHeader :subtitle="headerSubtitle">
+      <template
+        v-if="hasStatsOverview"
+        #actions
+      >
+        <AppHeaderStatLink />
+      </template>
       <template #title>
         <div class="flex min-w-0 flex-wrap items-center gap-2">
           <button
@@ -1682,38 +1748,7 @@ watch(removeWeightDialogOpen, (open) => {
           </button>
         </div>
 
-        <div
-          v-if="
-            mealForm.mode === 'ingredient' && !ingredientSelectOptions.length
-          "
-          class="rounded-app-sm border border-dashed border-app-border bg-app-elevated/40 p-3"
-        >
-          <p class="m-0 text-[0.8125rem] leading-relaxed text-app-text-muted">
-            Você ainda não tem ingredientes cadastrados. Crie o primeiro agora
-            para montar esta refeição sem sair desta tela.
-          </p>
-          <div class="mt-2.5 flex flex-wrap items-center gap-2">
-            <Button
-              size="small"
-              @click="openQuickIngredientDialog"
-            >
-              <span class="inline-flex items-center gap-1.5">
-                <IconPlus
-                  class="size-4"
-                  stroke-width="2"
-                  aria-hidden="true"
-                />
-                Novo ingrediente
-              </span>
-            </Button>
-          </div>
-        </div>
-
-        <template
-          v-if="
-            mealForm.mode === 'ingredient' && ingredientSelectOptions.length
-          "
-        >
+        <template v-if="mealForm.mode === 'ingredient'">
           <div>
             <label
               class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
@@ -1726,12 +1761,18 @@ watch(removeWeightDialogOpen, (open) => {
               :options="ingredientSelectOptions"
               optionLabel="name"
               optionValue="id"
+              dataKey="id"
               filter
               display="chip"
               selectedItemsLabel="{0} ingredientes"
               :maxSelectedLabels="2"
-              placeholder="Buscar e selecionar ingredientes"
+              placeholder="Buscar na TACO ou nos seus ingredientes"
+              filterPlaceholder="Digite para filtrar a lista"
+              scrollHeight="14rem"
+              :virtualScrollerOptions="mealIngredientVirtualOpts"
+              :loading="mealIngredientMsLoading"
               class="w-full"
+              @filter="onMealIngredientFilter"
             >
               <template #footer>
                 <div class="border-t border-app-border p-2">
@@ -2048,93 +2089,174 @@ watch(removeWeightDialogOpen, (open) => {
       position="bottom"
       :draggable="false"
     >
-      <div class="flex flex-col gap-3">
-        <div>
+      <div class="flex flex-col gap-4">
+        <div class="flex flex-col gap-2">
           <label
-            class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
+            for="quick-ingredient-name"
+            class="text-[0.8125rem] font-medium text-app-text-muted-2"
             >Nome</label
           >
           <InputText
+            id="quick-ingredient-name"
             v-model="quickIngredientForm.name"
+            placeholder="Ex.: Arroz branco cozido"
             class="w-full"
-            placeholder="Ex.: Frango grelhado"
           />
         </div>
-        <div class="grid grid-cols-2 gap-2">
-          <div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div class="flex flex-col gap-2">
             <label
-              class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
+              for="quick-ingredient-qty"
+              class="text-[0.8125rem] font-medium text-app-text-muted-2"
               >Quantidade</label
             >
             <InputNumber
+              id="quick-ingredient-qty"
               v-model="quickIngredientForm.quantity"
-              :min="1"
+              :min="0"
+              :max="100000"
+              :maxFractionDigits="2"
+              placeholder="0"
               class="w-full"
               input-class="w-full"
             />
           </div>
-          <div>
+          <div class="flex flex-col gap-2">
             <label
-              class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
+              for="quick-ingredient-unit"
+              class="text-[0.8125rem] font-medium text-app-text-muted-2"
               >Unidade</label
             >
-            <InputText
+            <Select
+              inputId="quick-ingredient-unit"
               v-model="quickIngredientForm.unit"
+              :options="quickIngredientUnitOptions"
+              optionLabel="label"
+              optionValue="value"
               class="w-full"
-              placeholder="g"
+              fluid
             />
           </div>
         </div>
-        <div>
-          <label
-            class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
-            >Calorias</label
+
+        <div
+          class="overflow-hidden rounded-app-lg border border-app-border bg-[color-mix(in_srgb,var(--app-bg-surface)_85%,transparent)]"
+          role="group"
+          aria-label="Tabela nutricional"
+        >
+          <div
+            class="grid grid-cols-[1fr_10rem] gap-3 border-b border-app-border bg-white/[0.02] px-3.5 py-3 text-xs font-bold text-app-text-muted-2 max-[380px]:grid-cols-[1fr_8.5rem]"
           >
-          <InputNumber
-            v-model="quickIngredientForm.kcal"
-            :min="0"
-            class="w-full"
-            input-class="w-full"
-          />
+            <span>Nutriente</span>
+            <span class="text-right">Valor</span>
+          </div>
+
+          <div class="divide-y divide-white/[0.05]">
+            <div
+              class="grid grid-cols-[1fr_10rem] items-center gap-3 px-3.5 py-2.5 max-[380px]:grid-cols-[1fr_8.5rem]"
+            >
+              <label
+                for="quick-ingredient-kcal"
+                class="min-w-0 text-[0.8125rem] font-semibold text-app-text"
+              >
+                Calorias <span class="text-[var(--accent-amber)]">*</span>
+              </label>
+              <div class="min-w-0">
+                <InputNumber
+                  id="quick-ingredient-kcal"
+                  v-model="quickIngredientForm.kcal"
+                  :min="0"
+                  :max="200000"
+                  :maxFractionDigits="1"
+                  placeholder="0"
+                  class="w-full"
+                  input-class="w-full"
+                />
+              </div>
+            </div>
+
+            <div
+              class="grid grid-cols-[1fr_10rem] items-center gap-3 px-3.5 py-2.5 max-[380px]:grid-cols-[1fr_8.5rem]"
+            >
+              <label
+                for="quick-ingredient-protein"
+                class="min-w-0 text-[0.8125rem] font-semibold text-app-text"
+              >
+                Proteína
+              </label>
+              <div class="min-w-0">
+                <InputNumber
+                  id="quick-ingredient-protein"
+                  v-model="quickIngredientForm.protein"
+                  :min="0"
+                  :max="100000"
+                  :maxFractionDigits="1"
+                  placeholder="0"
+                  class="w-full"
+                  input-class="w-full"
+                />
+              </div>
+            </div>
+
+            <div
+              class="grid grid-cols-[1fr_10rem] items-center gap-3 px-3.5 py-2.5 max-[380px]:grid-cols-[1fr_8.5rem]"
+            >
+              <label
+                for="quick-ingredient-carbs"
+                class="min-w-0 text-[0.8125rem] font-semibold text-app-text"
+              >
+                Carboidrato
+              </label>
+              <div class="min-w-0">
+                <InputNumber
+                  id="quick-ingredient-carbs"
+                  v-model="quickIngredientForm.carbs"
+                  :min="0"
+                  :max="100000"
+                  :maxFractionDigits="1"
+                  placeholder="0"
+                  class="w-full"
+                  input-class="w-full"
+                />
+              </div>
+            </div>
+
+            <div
+              class="grid grid-cols-[1fr_10rem] items-center gap-3 px-3.5 py-2.5 max-[380px]:grid-cols-[1fr_8.5rem]"
+            >
+              <label
+                for="quick-ingredient-fat"
+                class="min-w-0 text-[0.8125rem] font-semibold text-app-text"
+              >
+                Gordura
+              </label>
+              <div class="min-w-0">
+                <InputNumber
+                  id="quick-ingredient-fat"
+                  v-model="quickIngredientForm.fat"
+                  :min="0"
+                  :max="100000"
+                  :maxFractionDigits="1"
+                  placeholder="0"
+                  class="w-full"
+                  input-class="w-full"
+                />
+              </div>
+            </div>
+          </div>
         </div>
-        <div class="grid grid-cols-3 gap-2">
-          <InputNumber
-            v-model="quickIngredientForm.protein"
-            :min="0"
-            class="w-full"
-            input-class="w-full"
-            placeholder="Prot"
-          />
-          <InputNumber
-            v-model="quickIngredientForm.carbs"
-            :min="0"
-            class="w-full"
-            input-class="w-full"
-            placeholder="Carb"
-          />
-          <InputNumber
-            v-model="quickIngredientForm.fat"
-            :min="0"
-            class="w-full"
-            input-class="w-full"
-            placeholder="Gord"
-          />
-        </div>
-        <div class="flex justify-end gap-2 pt-1">
+
+        <div class="flex justify-end gap-2 pt-2">
           <Button
-            label="Cancelar"
             severity="secondary"
             outlined
-            size="small"
-            class="border-app-border"
             @click="quickIngredientDialogOpen = false"
-          />
-          <Button
-            label="Salvar ingrediente"
-            size="small"
-            :disabled="!quickIngredientValid"
-            @click="saveQuickIngredient"
-          />
+            >Cancelar</Button
+          >
+          <Button :disabled="!quickIngredientValid" @click="saveQuickIngredient">
+            Salvar
+          </Button>
         </div>
       </div>
     </Dialog>

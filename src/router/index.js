@@ -21,7 +21,8 @@ const routes = [
       },
       {
         path: "statistics",
-        redirect: { name: "today" },
+        name: "statistics",
+        component: () => import("../views/StatisticsView.vue"),
       },
       {
         path: "recipes",
