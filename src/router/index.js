@@ -25,6 +25,11 @@ const routes = [
         component: () => import("../views/StatisticsView.vue"),
       },
       {
+        path: "weight",
+        name: "weight",
+        component: () => import("../views/WeightView.vue"),
+      },
+      {
         path: "recipes",
         name: "recipes",
         component: () => import("../views/RecipesView.vue"),

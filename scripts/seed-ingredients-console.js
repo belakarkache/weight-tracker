@@ -102,6 +102,7 @@
       protein: (n % 12) + 1,
       carbs: (n % 25) + 2,
       fat: n % 15,
+      sodium: (n % 800) + 20,
       createdAt: now,
       updatedAt: now,
     });

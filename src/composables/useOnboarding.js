@@ -9,6 +9,8 @@ const defaultData = () => ({
   calorieDeficit: null,
   goalWeight: null,
   calorieTargetManual: null,
+  sodiumTargetMg: null,
+  fatTargetG: null,
   completedAt: null,
 })
 

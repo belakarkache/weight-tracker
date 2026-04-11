@@ -154,3 +154,16 @@ export function weightSeriesToChartPoints(series) {
     };
   });
 }
+
+/** Índices nos pontos da série para marcar no gráfico sem empilhar círculos (máx. `maxMarkers`). */
+export function weightChartMarkerIndices(seriesLength, maxMarkers = 6) {
+  const n = seriesLength;
+  if (n <= 0) return [];
+  if (n <= maxMarkers) return [...Array(n).keys()];
+  const out = new Set();
+  const m = maxMarkers;
+  for (let k = 0; k < m; k++) {
+    out.add(Math.round((k * (n - 1)) / Math.max(m - 1, 1)));
+  }
+  return [...out].sort((a, b) => a - b);
+}

@@ -12,8 +12,6 @@ import {
   IconSoup,
   IconTarget,
   IconApple,
-  IconBarbell,
-  IconDroplet,
 } from "@tabler/icons-vue";
 import { useToast } from "primevue/usetoast";
 import Button from "primevue/button";
@@ -27,7 +25,9 @@ import Select from "primevue/select";
 import SpeedDial from "primevue/speeddial";
 import AppHeader from "../components/AppHeader.vue";
 import AppHeaderStatLink from "../components/AppHeaderStatLink.vue";
+import AppHeaderWeightLink from "../components/AppHeaderWeightLink.vue";
 import InfoNotice from "../components/InfoNotice.vue";
+import CreateIngredientDialog from "../components/CreateIngredientDialog.vue";
 import { useOnboarding } from "../composables/useOnboarding";
 import { useIngredients } from "../composables/useIngredients";
 import { useRecipes } from "../composables/useRecipes";
@@ -36,9 +36,18 @@ import {
   useDailyLog,
   dateKeyFromDate,
   dayTotals,
+  latestWeightKgGlobally,
 } from "../composables/useDailyLog";
-import { dailyCalorieTarget, scaleIngredientMacros } from "../utils/nutrition";
-import { buildMealFromRecipePortion } from "../utils/recipes";
+import {
+  dailyCalorieTarget,
+  scaleIngredientMacros,
+  referenceMeasureSelectOptions,
+  referenceMeasureUnitValues,
+} from "../utils/nutrition";
+import {
+  buildMealFromRecipePortion,
+  buildRecipeAsIngredientOption,
+} from "../utils/recipes";
 import {
   buildIngredientLookupMap,
   mergeIngredientOptionsWindowed,
@@ -49,8 +58,7 @@ const router = useRouter();
 const toast = useToast();
 const { getStored: getProfile, save: saveProfile } = useOnboarding();
 const profileTick = ref(0);
-const { getStored: getIngredients, upsert: upsertIngredient } =
-  useIngredients();
+const { getStored: getIngredients } = useIngredients();
 const { getStored: getRecipes } = useRecipes();
 const dailyLog = useDailyLog();
 
@@ -192,6 +200,58 @@ const proteinProgress = computed(() => {
   };
 });
 
+const sodiumGoal = computed(() => {
+  const manual = Number(profile.value.sodiumTargetMg);
+  if (manual > 0) return Math.round(manual);
+  if (hasCalorieGoal.value || proteinGoal.value != null) return 2000;
+  return null;
+});
+
+const fatGoal = computed(() => {
+  const manual = Number(profile.value.fatTargetG);
+  if (manual > 0) return Math.round(manual * 10) / 10;
+  const kcal = calorieGoal.value;
+  if (!kcal || kcal <= 0) return null;
+  const g = (kcal * 0.3) / 9;
+  return Math.round(g * 10) / 10;
+});
+
+const sodiumProgress = computed(() => {
+  const goal = sodiumGoal.value;
+  const consumed = Number(totals.value.sodium) || 0;
+  if (!goal || goal <= 0) return { pct: 0, over: false };
+  return {
+    pct: Math.min(100, (consumed / goal) * 100),
+    over: consumed > goal,
+  };
+});
+
+const fatProgress = computed(() => {
+  const goal = fatGoal.value;
+  const consumed = Number(totals.value.fat) || 0;
+  if (!goal || goal <= 0) return { pct: 0, over: false };
+  return {
+    pct: Math.min(100, (consumed / goal) * 100),
+    over: consumed > goal,
+  };
+});
+
+const showProteinMacroSummary = computed(
+  () => proteinGoal.value != null || (Number(totals.value.protein) || 0) > 0,
+);
+const showSodiumMacroSummary = computed(
+  () => sodiumGoal.value != null || (Number(totals.value.sodium) || 0) > 0,
+);
+const showFatMacroSummary = computed(
+  () => fatGoal.value != null || (Number(totals.value.fat) || 0) > 0,
+);
+const showMacroSummaryBlock = computed(
+  () =>
+    showProteinMacroSummary.value ||
+    showSodiumMacroSummary.value ||
+    showFatMacroSummary.value,
+);
+
 const quickActions = computed(() => [
   {
     label: "Registrar peso",
@@ -240,22 +300,6 @@ const displayWeight = computed(() => {
   return null;
 });
 
-const weightGap = computed(() => {
-  const goal = Number(profile.value.goalWeight);
-  const cur = displayWeight.value?.kg;
-  if (!goal || cur == null) return null;
-  const diff = goal - cur;
-  const abs = Math.round(Math.abs(diff) * 10) / 10;
-  const met = abs < 0.05;
-  return {
-    met,
-    needGain: diff > 0.05,
-    needLose: diff < -0.05,
-    abs,
-    goal,
-  };
-});
-
 function startOfLocalDay(d) {
   const x = new Date(d);
   x.setHours(12, 0, 0, 0);
@@ -285,7 +329,7 @@ const headerTitle = computed(() => {
 
 const headerSubtitle = computed(() =>
   isSameCalendarDay(selectedDate.value, new Date())
-    ? "Metas, refeições e peso do dia"
+    ? "Metas e refeições do dia"
     : "Visualizando o dia selecionado.",
 );
 
@@ -345,6 +389,7 @@ const mealForm = ref({
   protein: null,
   carbs: null,
   fat: null,
+  sodium: null,
 });
 
 const mealIngredientFilter = ref("");
@@ -365,17 +410,32 @@ const mealIngredientMsLoading = computed(
   () => tacoLoading.value && mealDialogOpen.value && !tacoLoaded.value,
 );
 
+const baseIngredientMap = computed(() =>
+  buildIngredientLookupMap(ingredientsList.value, tacoList.value),
+);
+
+const recipeAsMealIngredients = computed(() =>
+  recipesList.value.map((r) =>
+    buildRecipeAsIngredientOption(r, (id) => baseIngredientMap.value[id]),
+  ),
+);
+
+const ingredientMap = computed(() => {
+  const m = { ...baseIngredientMap.value };
+  for (const opt of recipeAsMealIngredients.value) {
+    m[opt.id] = opt;
+  }
+  return m;
+});
+
 const ingredientSelectOptions = computed(() =>
   mergeIngredientOptionsWindowed(
     ingredientsList.value,
     tacoList.value,
+    recipeAsMealIngredients.value,
     mealForm.value.ingredientIds,
     mealIngredientFilter.value,
   ),
-);
-
-const ingredientMap = computed(() =>
-  buildIngredientLookupMap(ingredientsList.value, tacoList.value),
 );
 
 const selectedIngredients = computed(() =>
@@ -418,48 +478,29 @@ const ingredientMealEntries = computed(() =>
           : Number(ing.quantity) > 0
             ? Number(ing.quantity)
             : 100;
-      const macros = scaleIngredientMacros(ing, quantity);
+      const unit =
+        mealForm.value.ingredientUnits?.[ing.id] ?? ing.unit ?? "g";
+      const macros = scaleIngredientMacros(ing, quantity, unit);
       return {
         ingredientId: ing.id,
         name: ing.name,
-        unit: ing.unit ?? "g",
+        unit,
         quantityConsumed: quantity,
         kcal: macros.kcal,
         protein: macros.protein,
         carbs: macros.carbs,
         fat: macros.fat,
+        sodium: macros.sodium,
       };
     })
     .filter((entry) => entry.quantityConsumed > 0),
 );
 
-const quickIngredientUnitOptions = [
-  { label: "Gramas (g)", value: "g" },
-  { label: "Mililitros (ml)", value: "ml" },
-  { label: "Unidade (un)", value: "un" },
-];
+function measureOptionsForMealIngredient(ing) {
+  return referenceMeasureSelectOptions(ing);
+}
 
 const quickIngredientDialogOpen = ref(false);
-const quickIngredientForm = ref({
-  name: "",
-  quantity: 100,
-  unit: "g",
-  kcal: null,
-  protein: null,
-  carbs: null,
-  fat: null,
-});
-
-const quickIngredientValid = computed(() => {
-  const f = quickIngredientForm.value;
-  return (
-    f.name.trim().length > 0 &&
-    f.quantity != null &&
-    Number(f.quantity) > 0 &&
-    f.kcal != null &&
-    Number(f.kcal) >= 0
-  );
-});
 
 const scaledFromIngredient = computed(() =>
   ingredientMealEntries.value.reduce(
@@ -468,22 +509,26 @@ const scaledFromIngredient = computed(() =>
       acc.protein += Number(entry.protein) || 0;
       acc.carbs += Number(entry.carbs) || 0;
       acc.fat += Number(entry.fat) || 0;
+      acc.sodium += Number(entry.sodium) || 0;
       return acc;
     },
-    { kcal: 0, protein: 0, carbs: 0, fat: 0 },
+    { kcal: 0, protein: 0, carbs: 0, fat: 0, sodium: 0 },
   ),
 );
 
 const recipeMealPreview = computed(() => {
   const f = mealForm.value;
   if (f.mode !== "recipe" || !f.recipeId) {
-    return { entries: [], totals: { kcal: 0, protein: 0, carbs: 0, fat: 0 } };
+    return {
+      entries: [],
+      totals: { kcal: 0, protein: 0, carbs: 0, fat: 0, sodium: 0 },
+    };
   }
   const recipe = recipeMap.value[f.recipeId];
   return buildMealFromRecipePortion(
     recipe,
     f.recipeConsumedQty,
-    (id) => ingredientMap.value[id],
+    (id) => baseIngredientMap.value[id],
   );
 });
 
@@ -539,6 +584,7 @@ function openMealCreate() {
     mode: "ingredient",
     ingredientIds: [],
     ingredientQuantities: {},
+    ingredientUnits: {},
     recipeId: null,
     recipeConsumedQty: null,
     name: "",
@@ -546,47 +592,26 @@ function openMealCreate() {
     protein: null,
     carbs: null,
     fat: null,
+    sodium: null,
   };
   mealDialogOpen.value = true;
 }
 
 function openQuickIngredientDialog() {
-  quickIngredientForm.value = {
-    name: "",
-    quantity: 100,
-    unit: "g",
-    kcal: null,
-    protein: null,
-    carbs: null,
-    fat: null,
-  };
   quickIngredientDialogOpen.value = true;
 }
 
-function saveQuickIngredient() {
-  if (!quickIngredientValid.value) return;
-  const f = quickIngredientForm.value;
-  const saved = upsertIngredient({
-    name: f.name.trim(),
-    quantity: Number(f.quantity),
-    unit: f.unit ?? "g",
-    kcal: Number(f.kcal),
-    protein: f.protein != null ? Number(f.protein) : null,
-    carbs: f.carbs != null ? Number(f.carbs) : null,
-    fat: f.fat != null ? Number(f.fat) : null,
-  });
+function onQuickIngredientSaved({ ingredient, referenceQuantity }) {
   refreshIngredients();
-  const id = saved?.id;
-  if (id) {
-    mealForm.value.ingredientIds = [
-      ...new Set([...(mealForm.value.ingredientIds ?? []), id]),
-    ];
-    mealForm.value.ingredientQuantities = {
-      ...(mealForm.value.ingredientQuantities ?? {}),
-      [id]: Number(f.quantity),
-    };
-  }
-  quickIngredientDialogOpen.value = false;
+  const id = ingredient?.id;
+  if (!id) return;
+  mealForm.value.ingredientIds = [
+    ...new Set([...(mealForm.value.ingredientIds ?? []), id]),
+  ];
+  mealForm.value.ingredientQuantities = {
+    ...(mealForm.value.ingredientQuantities ?? {}),
+    [id]: referenceQuantity,
+  };
 }
 
 function openMealEdit(meal) {
@@ -600,6 +625,7 @@ function openMealEdit(meal) {
       mode: "recipe",
       ingredientIds: [],
       ingredientQuantities: {},
+      ingredientUnits: {},
       recipeId: meal.recipeId ?? null,
       recipeConsumedQty:
         meal.recipeQuantityConsumed != null
@@ -610,6 +636,7 @@ function openMealEdit(meal) {
       protein: meal.protein ?? null,
       carbs: meal.carbs ?? null,
       fat: meal.fat ?? null,
+      sodium: meal.sodium ?? null,
     };
     mealDialogOpen.value = true;
     return;
@@ -628,10 +655,21 @@ function openMealEdit(meal) {
     : meal.ingredientId
       ? { [meal.ingredientId]: Number(meal.quantityConsumed) || 100 }
       : {};
+  const unitsFromMeal =
+    Array.isArray(meal.ingredients) && meal.ingredients.length
+      ? Object.fromEntries(
+          meal.ingredients
+            .filter((x) => x?.ingredientId)
+            .map((x) => [x.ingredientId, x.unit ?? "g"]),
+        )
+      : meal.ingredientId
+        ? { [meal.ingredientId]: "g" }
+        : {};
   mealForm.value = {
     mode: meal.source === "ingredient" ? "ingredient" : "manual",
     ingredientIds: idsFromMeal,
     ingredientQuantities: qtyFromMeal,
+    ingredientUnits: unitsFromMeal,
     recipeId: null,
     recipeConsumedQty: null,
     name: meal.name ?? "",
@@ -639,6 +677,7 @@ function openMealEdit(meal) {
     protein: meal.protein ?? null,
     carbs: meal.carbs ?? null,
     fat: meal.fat ?? null,
+    sodium: meal.sodium ?? null,
   };
   mealDialogOpen.value = true;
 }
@@ -683,6 +722,10 @@ function saveMeal() {
       protein: Number(scaledFromIngredient.value.protein.toFixed(1)) || null,
       carbs: Number(scaledFromIngredient.value.carbs.toFixed(1)) || null,
       fat: Number(scaledFromIngredient.value.fat.toFixed(1)) || null,
+      sodium:
+        Math.round(scaledFromIngredient.value.sodium) > 0
+          ? Math.round(scaledFromIngredient.value.sodium)
+          : null,
     });
   } else if (f.mode === "recipe") {
     const recipe = recipeMap.value[f.recipeId];
@@ -715,6 +758,7 @@ function saveMeal() {
       protein: Number(totals.protein.toFixed(1)) || null,
       carbs: Number(totals.carbs.toFixed(1)) || null,
       fat: Number(totals.fat.toFixed(1)) || null,
+      sodium: Math.round(totals.sodium) > 0 ? Math.round(totals.sodium) : null,
     });
   } else {
     dailyLog.upsertMeal(dk, {
@@ -734,6 +778,7 @@ function saveMeal() {
       protein: f.protein != null ? Number(f.protein) : null,
       carbs: f.carbs != null ? Number(f.carbs) : null,
       fat: f.fat != null ? Number(f.fat) : null,
+      sodium: f.sodium != null ? Math.round(Number(f.sodium)) : null,
     });
   }
 
@@ -800,10 +845,13 @@ function saveWeight() {
   }
   const dk = dayKey.value;
   if (!dk) return;
+  const kg = Math.round(Number(weightForm.value.kg) * 10) / 10;
   dailyLog.upsertWeight(dk, {
-    kg: Number(weightForm.value.kg),
+    kg,
     recordedAt: new Date().toISOString(),
   });
+  saveProfile({ weight: kg });
+  profileTick.value++;
   weightDialogOpen.value = false;
   toast.add({
     group: "pwa",
@@ -833,6 +881,11 @@ function confirmRemoveWeight() {
   const dk = dayKey.value;
   if (!w || !dk) return;
   dailyLog.removeWeight(dk, w.id);
+  const latest = latestWeightKgGlobally(dailyLog.entries.value);
+  if (latest != null && Number(latest) > 0) {
+    saveProfile({ weight: Number(latest) });
+  }
+  profileTick.value++;
   closeRemoveWeightDialog();
 }
 
@@ -885,40 +938,6 @@ function saveCalorieMeta() {
   });
 }
 
-const weightGoalDialogOpen = ref(false);
-const weightGoalForm = ref(null);
-
-function openWeightGoalDialog() {
-  weightGoalForm.value =
-    profile.value.goalWeight != null ? Number(profile.value.goalWeight) : null;
-  weightGoalDialogOpen.value = true;
-}
-
-function saveWeightGoalDialog() {
-  const v = Number(weightGoalForm.value);
-  if (!v || v <= 0 || v > 400) {
-    toast.add({
-      group: "pwa",
-      severity: "warn",
-      summary: "Valor inválido",
-      detail: "Informe uma meta de peso válida (kg).",
-      life: 3200,
-    });
-    return;
-  }
-  saveProfile({ goalWeight: Math.round(v * 10) / 10 });
-  profileTick.value++;
-  weightGoalDialogOpen.value = false;
-  toast.add({
-    group: "pwa",
-    severity: "success",
-    summary: "Meta de peso atualizada",
-    detail: "Sincronizado com o perfil.",
-    life: 2500,
-    closable: false,
-  });
-}
-
 onMounted(() => {
   void ensureTacoLoaded();
 });
@@ -937,18 +956,31 @@ watch(
   () => mealForm.value.ingredientIds,
   (ids) => {
     const keep = new Set(ids ?? []);
-    const next = {};
+    const nextQty = {};
+    const nextUnit = {};
     for (const [k, v] of Object.entries(
       mealForm.value.ingredientQuantities ?? {},
     )) {
-      if (keep.has(k)) next[k] = v;
+      if (keep.has(k)) nextQty[k] = v;
+    }
+    for (const [k, v] of Object.entries(
+      mealForm.value.ingredientUnits ?? {},
+    )) {
+      if (keep.has(k)) nextUnit[k] = v;
     }
     for (const id of keep) {
-      if (next[id] != null && Number(next[id]) > 0) continue;
       const ing = ingredientMap.value[id];
-      next[id] = Number(ing?.quantity) > 0 ? Number(ing.quantity) : 100;
+      if (nextQty[id] == null || Number(nextQty[id]) <= 0) {
+        nextQty[id] = Number(ing?.quantity) > 0 ? Number(ing.quantity) : 100;
+      }
+      const allowed = referenceMeasureUnitValues(ing);
+      const cur = nextUnit[id];
+      if (!cur || !allowed.includes(cur)) {
+        nextUnit[id] = ing?.unit ?? "g";
+      }
     }
-    mealForm.value.ingredientQuantities = next;
+    mealForm.value.ingredientQuantities = nextQty;
+    mealForm.value.ingredientUnits = nextUnit;
   },
   { deep: true },
 );
@@ -967,11 +999,11 @@ watch(removeWeightDialogOpen, (open) => {
     class="app-page relative flex h-full min-h-0 flex-col overflow-hidden text-slate-100"
   >
     <AppHeader :subtitle="headerSubtitle">
-      <template
-        v-if="hasStatsOverview"
-        #actions
-      >
-        <AppHeaderStatLink />
+      <template #actions>
+        <div class="flex shrink-0 items-center gap-1.5">
+          <AppHeaderWeightLink />
+          <AppHeaderStatLink v-if="hasStatsOverview" />
+        </div>
       </template>
       <template #title>
         <div class="flex min-w-0 flex-wrap items-center gap-2">
@@ -1031,7 +1063,7 @@ watch(removeWeightDialogOpen, (open) => {
     </AppHeader>
 
     <div
-      class="relative z-[1] mx-auto flex min-h-0 w-full max-w-lg flex-1 min-w-0 flex-col gap-5 overflow-y-auto overflow-x-hidden px-4 pb-28 pt-4"
+      class="app-scroll relative z-[1] mx-auto flex min-h-0 w-full max-w-lg flex-1 min-w-0 flex-col gap-5 overflow-y-auto overflow-x-hidden px-4 pb-28 pt-4"
     >
       <div
         class="pointer-events-none absolute inset-0 z-0"
@@ -1053,86 +1085,12 @@ watch(removeWeightDialogOpen, (open) => {
           class="flex flex-col gap-3"
           aria-labelledby="today-section-weight-heading"
         >
-          <article
-            class="rounded-xl border border-violet-400/35 border-l-4 border-l-violet-400 px-3.5 py-3"
-            style="
-              background: linear-gradient(
-                135deg,
-                rgba(167, 139, 250, 0.12) 0%,
-                rgba(139, 92, 246, 0.07) 100%
-              );
-            "
+          <h2
+            id="today-section-weight-heading"
+            class="m-0 text-[0.6875rem] font-semibold uppercase tracking-wider text-app-text-muted-2"
           >
-            <div class="mb-2 flex items-center justify-between gap-2.5">
-              <div
-                class="flex items-center gap-1.5 text-[0.625rem] font-semibold uppercase tracking-wide text-violet-100/95"
-              >
-                <IconTarget
-                  class="size-3.5 shrink-0 opacity-95"
-                  stroke-width="2"
-                />
-                Peso & meta
-              </div>
-              <Button
-                variant="link"
-                size="small"
-                class="!min-w-0 shrink-0 !p-0"
-                aria-label="Editar meta de peso"
-                @click="openWeightGoalDialog"
-              >
-                <template #icon>
-                  <IconPencil
-                    class="size-4 text-violet-100/95"
-                    stroke-width="2"
-                  />
-                </template>
-              </Button>
-            </div>
-            <div class="flex items-center gap-2.5">
-              <IconScale
-                class="size-8 shrink-0 text-violet-200/90"
-                stroke-width="1.35"
-                aria-hidden="true"
-              />
-              <div class="min-w-0 flex-1 space-y-1">
-                <p
-                  v-if="displayWeight"
-                  class="m-0 text-lg font-bold tabular-nums leading-tight text-violet-50"
-                >
-                  {{ fmt1(displayWeight.kg) }}
-                  <span class="text-xs font-semibold text-violet-200/80"
-                    >kg</span
-                  >
-                </p>
-                <p
-                  v-else
-                  class="m-0 text-xs text-violet-200/75"
-                >
-                  Sem peso no perfil.
-                </p>
-                <p
-                  v-if="weightGap && displayWeight"
-                  class="m-0 pt-0.5 text-[0.6875rem] leading-snug text-violet-100/85"
-                >
-                  <span class="tabular-nums"
-                    >Meta {{ fmt1(weightGap.goal) }} kg</span
-                  >
-                  <span class="mx-1 text-violet-300/60">·</span>
-                  <span
-                    v-if="weightGap.met"
-                    class="font-medium text-emerald-200"
-                    >Na meta</span
-                  >
-                  <span
-                    v-else
-                    class="font-medium"
-                    >Faltam {{ fmt1(weightGap.abs) }} kg</span
-                  >
-                </p>
-              </div>
-            </div>
-          </article>
-
+            Peso neste dia
+          </h2>
           <div
             v-if="!weightsToday.length"
             class="w-full"
@@ -1461,7 +1419,7 @@ watch(removeWeightDialogOpen, (open) => {
                       </ul>
                     </div>
                     <div
-                      class="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-4"
+                      class="mt-2 grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3 lg:grid-cols-5"
                     >
                       <div>
                         <span
@@ -1511,6 +1469,21 @@ watch(removeWeightDialogOpen, (open) => {
                           class="m-0 text-sm font-semibold tabular-nums text-app-text"
                         >
                           {{ meal.fat != null ? fmt1(meal.fat) + " g" : "—" }}
+                        </p>
+                      </div>
+                      <div>
+                        <span
+                          class="text-[0.625rem] font-medium text-app-text-muted-2"
+                          >Sódio</span
+                        >
+                        <p
+                          class="m-0 text-sm font-semibold tabular-nums text-app-text"
+                        >
+                          {{
+                            meal.sodium != null
+                              ? fmtInt(meal.sodium) + " mg"
+                              : "—"
+                          }}
                         </p>
                       </div>
                     </div>
@@ -1571,87 +1544,150 @@ watch(removeWeightDialogOpen, (open) => {
               Total consumido no dia
             </h3>
             <div
-              v-if="proteinGoal"
-              class="mb-3"
+              v-if="showMacroSummaryBlock"
+              class="mb-3 space-y-3"
             >
-              <p class="m-0 text-[0.75rem] text-app-text-muted">
-                Proteína indicada: {{ fmtInt(proteinGoal) }} g/dia · Consumido:
-                {{ fmt1(totals.protein) }} g
-                <span class="text-app-text-muted-2">
-                  ({{ fmtInt(proteinProgress.pct) }}%)
-                </span>
-              </p>
-              <div class="mt-1 h-1 overflow-hidden rounded-full bg-app-border">
+              <div v-if="showProteinMacroSummary">
+                <p class="m-0 text-[0.75rem] text-app-text-muted">
+                  <template v-if="proteinGoal">
+                    Proteína indicada: {{ fmtInt(proteinGoal) }} g/dia · Consumido:
+                    {{ fmt1(totals.protein) }} g
+                    <span class="text-app-text-muted-2">
+                      ({{ fmtInt(proteinProgress.pct) }}%)
+                    </span>
+                  </template>
+                  <template v-else>
+                    Proteína consumida: {{ fmt1(totals.protein) }} g
+                  </template>
+                </p>
                 <div
-                  class="h-full rounded-full transition-all duration-500 ease-out"
-                  :class="
-                    proteinProgress.over
-                      ? 'bg-amber-400'
-                      : 'bg-gradient-to-r from-violet-400 to-indigo-400'
-                  "
-                  :style="{ width: `${proteinProgress.pct}%` }"
-                />
+                  v-if="proteinGoal"
+                  class="mt-1 h-1 overflow-hidden rounded-full bg-app-border"
+                >
+                  <div
+                    class="h-full rounded-full transition-all duration-500 ease-out"
+                    :class="
+                      proteinProgress.over
+                        ? 'bg-amber-400'
+                        : 'bg-gradient-to-r from-violet-400 to-indigo-400'
+                    "
+                    :style="{ width: `${proteinProgress.pct}%` }"
+                  />
+                </div>
+              </div>
+              <div v-if="showFatMacroSummary">
+                <p class="m-0 text-[0.75rem] text-app-text-muted">
+                  <template v-if="fatGoal">
+                    Gordura indicada: {{ fmt1(fatGoal) }} g/dia · Consumido:
+                    {{ fmt1(totals.fat) }} g
+                    <span class="text-app-text-muted-2">
+                      ({{ fmtInt(fatProgress.pct) }}%)
+                    </span>
+                  </template>
+                  <template v-else>
+                    Gordura consumida: {{ fmt1(totals.fat) }} g
+                  </template>
+                </p>
+                <div
+                  v-if="fatGoal"
+                  class="mt-1 h-1 overflow-hidden rounded-full bg-app-border"
+                >
+                  <div
+                    class="h-full rounded-full transition-all duration-500 ease-out"
+                    :class="
+                      fatProgress.over
+                        ? 'bg-amber-400'
+                        : 'bg-amber-500/80'
+                    "
+                    :style="{ width: `${fatProgress.pct}%` }"
+                  />
+                </div>
+              </div>
+              <div v-if="showSodiumMacroSummary">
+                <p class="m-0 text-[0.75rem] text-app-text-muted">
+                  <template v-if="sodiumGoal">
+                    Sódio indicado: {{ fmtInt(sodiumGoal) }} mg/dia · Consumido:
+                    {{ fmtInt(totals.sodium) }} mg
+                    <span class="text-app-text-muted-2">
+                      ({{ fmtInt(sodiumProgress.pct) }}%)
+                    </span>
+                  </template>
+                  <template v-else>
+                    Sódio consumido: {{ fmtInt(totals.sodium) }} mg
+                  </template>
+                </p>
+                <div
+                  v-if="sodiumGoal"
+                  class="mt-1 h-1 overflow-hidden rounded-full bg-app-border"
+                >
+                  <div
+                    class="h-full rounded-full transition-all duration-500 ease-out"
+                    :class="
+                      sodiumProgress.over
+                        ? 'bg-amber-400'
+                        : 'bg-sky-400/90'
+                    "
+                    :style="{ width: `${sodiumProgress.pct}%` }"
+                  />
+                </div>
               </div>
             </div>
-            <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div
-                class="rounded-app-sm border border-app-border bg-app-surface/80 px-3 py-2.5"
-              >
-                <span class="text-[0.625rem] font-medium text-app-text-muted-2"
+            <div
+              class="grid grid-cols-2 gap-x-3 gap-y-2 sm:grid-cols-3 lg:grid-cols-5"
+            >
+              <div>
+                <span
+                  class="text-[0.625rem] font-medium text-app-text-muted-2"
                   >Calorias</span
                 >
                 <p
-                  class="m-0 mt-0.5 text-lg font-bold tabular-nums text-teal-300"
+                  class="m-0 text-sm font-semibold tabular-nums text-app-text"
                 >
-                  {{ fmtInt(totals.kcal) }}
+                  {{ fmtInt(totals.kcal) }} kcal
                 </p>
               </div>
-              <div
-                class="rounded-app-sm border border-app-border bg-app-surface/80 px-3 py-2.5"
-              >
-                <div
-                  class="flex items-center gap-1 text-[0.625rem] font-medium text-app-text-muted-2"
+              <div>
+                <span
+                  class="text-[0.625rem] font-medium text-app-text-muted-2"
+                  >Proteína</span
                 >
-                  <IconBarbell
-                    class="size-3"
-                    stroke-width="2"
-                  />
-                  Proteína
-                </div>
                 <p
-                  class="m-0 mt-0.5 text-lg font-bold tabular-nums text-app-text"
+                  class="m-0 text-sm font-semibold tabular-nums text-app-text"
                 >
                   {{ fmt1(totals.protein) }} g
                 </p>
               </div>
-              <div
-                class="rounded-app-sm border border-app-border bg-app-surface/80 px-3 py-2.5"
-              >
-                <span class="text-[0.625rem] font-medium text-app-text-muted-2"
-                  >Carboidratos</span
+              <div>
+                <span
+                  class="text-[0.625rem] font-medium text-app-text-muted-2"
+                  >Carbos</span
                 >
                 <p
-                  class="m-0 mt-0.5 text-lg font-bold tabular-nums text-app-text"
+                  class="m-0 text-sm font-semibold tabular-nums text-app-text"
                 >
                   {{ fmt1(totals.carbs) }} g
                 </p>
               </div>
-              <div
-                class="rounded-app-sm border border-app-border bg-app-surface/80 px-3 py-2.5"
-              >
-                <div
-                  class="flex items-center gap-1 text-[0.625rem] font-medium text-app-text-muted-2"
+              <div>
+                <span
+                  class="text-[0.625rem] font-medium text-app-text-muted-2"
+                  >Gorduras</span
                 >
-                  <IconDroplet
-                    class="size-3"
-                    stroke-width="2"
-                  />
-                  Gorduras
-                </div>
                 <p
-                  class="m-0 mt-0.5 text-lg font-bold tabular-nums text-app-text"
+                  class="m-0 text-sm font-semibold tabular-nums text-app-text"
                 >
                   {{ fmt1(totals.fat) }} g
+                </p>
+              </div>
+              <div>
+                <span
+                  class="text-[0.625rem] font-medium text-app-text-muted-2"
+                  >Sódio</span
+                >
+                <p
+                  class="m-0 text-sm font-semibold tabular-nums text-app-text"
+                >
+                  {{ fmtInt(totals.sodium) }} mg
                 </p>
               </div>
             </div>
@@ -1764,9 +1800,9 @@ watch(removeWeightDialogOpen, (open) => {
               dataKey="id"
               filter
               display="chip"
-              selectedItemsLabel="{0} ingredientes"
+              selectedItemsLabel="{0} itens"
               :maxSelectedLabels="2"
-              placeholder="Buscar na TACO ou nos seus ingredientes"
+              placeholder="Buscar ingredientes, receitas ou TACO"
               filterPlaceholder="Digite para filtrar a lista"
               scrollHeight="14rem"
               :virtualScrollerOptions="mealIngredientVirtualOpts"
@@ -1774,6 +1810,23 @@ watch(removeWeightDialogOpen, (open) => {
               class="w-full"
               @filter="onMealIngredientFilter"
             >
+              <template #option="{ option }">
+                <div class="flex min-w-0 items-center gap-2">
+                  <IconChefHat
+                    v-if="String(option?.id ?? '').startsWith('recipe:')"
+                    class="size-4 shrink-0 text-amber-400/90"
+                    stroke-width="1.75"
+                    aria-hidden="true"
+                  />
+                  <IconApple
+                    v-else-if="!option?.tacoReference"
+                    class="size-4 shrink-0 text-teal-400/85"
+                    stroke-width="1.75"
+                    aria-hidden="true"
+                  />
+                  <span class="min-w-0 truncate">{{ option.name }}</span>
+                </div>
+              </template>
               <template #footer>
                 <div class="border-t border-app-border p-2">
                   <Button
@@ -1794,21 +1847,28 @@ watch(removeWeightDialogOpen, (open) => {
             <div
               v-for="ing in selectedIngredients"
               :key="ing.id"
-              class="flex items-center gap-2"
+              class="flex flex-wrap items-center gap-2"
             >
-              <span class="min-w-0 flex-1 truncate text-sm text-app-text">{{
+              <span class="min-w-0 flex-[1_1_8rem] truncate text-sm text-app-text">{{
                 ing.name
               }}</span>
               <InputNumber
                 v-model="mealForm.ingredientQuantities[ing.id]"
-                :min="1"
-                class="w-28 shrink-0"
+                :min="0.01"
+                :max-fraction-digits="2"
+                locale="pt-BR"
+                class="w-[6.5rem] shrink-0"
                 input-class="w-full"
                 :placeholder="String(ing.quantity ?? 100)"
               />
-              <span class="w-8 text-right text-xs text-app-text-muted-2">{{
-                ing.unit ?? "g"
-              }}</span>
+              <Select
+                v-model="mealForm.ingredientUnits[ing.id]"
+                :options="measureOptionsForMealIngredient(ing)"
+                option-label="label"
+                option-value="value"
+                class="min-w-[7.5rem] flex-1 shrink-0 sm:max-w-[11rem]"
+                :input-id="'meal-ing-unit-' + ing.id"
+              />
             </div>
           </div>
           <div
@@ -1829,6 +1889,10 @@ watch(removeWeightDialogOpen, (open) => {
             <span class="mx-1 text-app-text-muted">·</span>
             <span class="tabular-nums text-app-text-muted"
               >G {{ fmt1(scaledFromIngredient.fat) }} g</span
+            >
+            <span class="mx-1 text-app-text-muted">·</span>
+            <span class="tabular-nums text-app-text-muted"
+              >Na {{ fmtInt(scaledFromIngredient.sodium) }} mg</span
             >
           </div>
         </template>
@@ -1927,6 +1991,10 @@ watch(removeWeightDialogOpen, (open) => {
             <span class="tabular-nums text-app-text-muted"
               >G {{ fmt1(recipeMealPreview.totals.fat) }} g</span
             >
+            <span class="mx-1 text-app-text-muted">·</span>
+            <span class="tabular-nums text-app-text-muted"
+              >Na {{ fmtInt(recipeMealPreview.totals.sodium) }} mg</span
+            >
           </div>
           <div class="border-t border-app-border pt-1">
             <Button
@@ -1970,7 +2038,7 @@ watch(removeWeightDialogOpen, (open) => {
               input-class="w-full"
             />
           </div>
-          <div class="grid grid-cols-3 gap-2">
+          <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div>
               <label
                 class="mb-1.5 block text-[0.6875rem] font-medium text-app-text-muted-2"
@@ -1981,6 +2049,8 @@ watch(removeWeightDialogOpen, (open) => {
                 id="meal-p"
                 v-model="mealForm.protein"
                 :min="0"
+                locale="pt-BR"
+                :max-fraction-digits="2"
                 class="w-full"
                 input-class="w-full"
               />
@@ -1995,6 +2065,8 @@ watch(removeWeightDialogOpen, (open) => {
                 id="meal-c"
                 v-model="mealForm.carbs"
                 :min="0"
+                locale="pt-BR"
+                :max-fraction-digits="2"
                 class="w-full"
                 input-class="w-full"
               />
@@ -2008,6 +2080,22 @@ watch(removeWeightDialogOpen, (open) => {
               <InputNumber
                 id="meal-f"
                 v-model="mealForm.fat"
+                :min="0"
+                locale="pt-BR"
+                :max-fraction-digits="2"
+                class="w-full"
+                input-class="w-full"
+              />
+            </div>
+            <div>
+              <label
+                class="mb-1.5 block text-[0.6875rem] font-medium text-app-text-muted-2"
+                for="meal-na"
+                >Sódio (mg)</label
+              >
+              <InputNumber
+                id="meal-na"
+                v-model="mealForm.sodium"
                 :min="0"
                 class="w-full"
                 input-class="w-full"
@@ -2080,186 +2168,12 @@ watch(removeWeightDialogOpen, (open) => {
       </div>
     </div>
 
-    <Dialog
-      v-model:visible="quickIngredientDialogOpen"
-      modal
-      header="Novo ingrediente"
-      class="app-dialog"
-      :style="todayDialogStyle"
-      position="bottom"
-      :draggable="false"
-    >
-      <div class="flex flex-col gap-4">
-        <div class="flex flex-col gap-2">
-          <label
-            for="quick-ingredient-name"
-            class="text-[0.8125rem] font-medium text-app-text-muted-2"
-            >Nome</label
-          >
-          <InputText
-            id="quick-ingredient-name"
-            v-model="quickIngredientForm.name"
-            placeholder="Ex.: Arroz branco cozido"
-            class="w-full"
-          />
-        </div>
-
-        <div class="grid grid-cols-2 gap-3">
-          <div class="flex flex-col gap-2">
-            <label
-              for="quick-ingredient-qty"
-              class="text-[0.8125rem] font-medium text-app-text-muted-2"
-              >Quantidade</label
-            >
-            <InputNumber
-              id="quick-ingredient-qty"
-              v-model="quickIngredientForm.quantity"
-              :min="0"
-              :max="100000"
-              :maxFractionDigits="2"
-              placeholder="0"
-              class="w-full"
-              input-class="w-full"
-            />
-          </div>
-          <div class="flex flex-col gap-2">
-            <label
-              for="quick-ingredient-unit"
-              class="text-[0.8125rem] font-medium text-app-text-muted-2"
-              >Unidade</label
-            >
-            <Select
-              inputId="quick-ingredient-unit"
-              v-model="quickIngredientForm.unit"
-              :options="quickIngredientUnitOptions"
-              optionLabel="label"
-              optionValue="value"
-              class="w-full"
-              fluid
-            />
-          </div>
-        </div>
-
-        <div
-          class="overflow-hidden rounded-app-lg border border-app-border bg-[color-mix(in_srgb,var(--app-bg-surface)_85%,transparent)]"
-          role="group"
-          aria-label="Tabela nutricional"
-        >
-          <div
-            class="grid grid-cols-[1fr_10rem] gap-3 border-b border-app-border bg-white/[0.02] px-3.5 py-3 text-xs font-bold text-app-text-muted-2 max-[380px]:grid-cols-[1fr_8.5rem]"
-          >
-            <span>Nutriente</span>
-            <span class="text-right">Valor</span>
-          </div>
-
-          <div class="divide-y divide-white/[0.05]">
-            <div
-              class="grid grid-cols-[1fr_10rem] items-center gap-3 px-3.5 py-2.5 max-[380px]:grid-cols-[1fr_8.5rem]"
-            >
-              <label
-                for="quick-ingredient-kcal"
-                class="min-w-0 text-[0.8125rem] font-semibold text-app-text"
-              >
-                Calorias <span class="text-[var(--accent-amber)]">*</span>
-              </label>
-              <div class="min-w-0">
-                <InputNumber
-                  id="quick-ingredient-kcal"
-                  v-model="quickIngredientForm.kcal"
-                  :min="0"
-                  :max="200000"
-                  :maxFractionDigits="1"
-                  placeholder="0"
-                  class="w-full"
-                  input-class="w-full"
-                />
-              </div>
-            </div>
-
-            <div
-              class="grid grid-cols-[1fr_10rem] items-center gap-3 px-3.5 py-2.5 max-[380px]:grid-cols-[1fr_8.5rem]"
-            >
-              <label
-                for="quick-ingredient-protein"
-                class="min-w-0 text-[0.8125rem] font-semibold text-app-text"
-              >
-                Proteína
-              </label>
-              <div class="min-w-0">
-                <InputNumber
-                  id="quick-ingredient-protein"
-                  v-model="quickIngredientForm.protein"
-                  :min="0"
-                  :max="100000"
-                  :maxFractionDigits="1"
-                  placeholder="0"
-                  class="w-full"
-                  input-class="w-full"
-                />
-              </div>
-            </div>
-
-            <div
-              class="grid grid-cols-[1fr_10rem] items-center gap-3 px-3.5 py-2.5 max-[380px]:grid-cols-[1fr_8.5rem]"
-            >
-              <label
-                for="quick-ingredient-carbs"
-                class="min-w-0 text-[0.8125rem] font-semibold text-app-text"
-              >
-                Carboidrato
-              </label>
-              <div class="min-w-0">
-                <InputNumber
-                  id="quick-ingredient-carbs"
-                  v-model="quickIngredientForm.carbs"
-                  :min="0"
-                  :max="100000"
-                  :maxFractionDigits="1"
-                  placeholder="0"
-                  class="w-full"
-                  input-class="w-full"
-                />
-              </div>
-            </div>
-
-            <div
-              class="grid grid-cols-[1fr_10rem] items-center gap-3 px-3.5 py-2.5 max-[380px]:grid-cols-[1fr_8.5rem]"
-            >
-              <label
-                for="quick-ingredient-fat"
-                class="min-w-0 text-[0.8125rem] font-semibold text-app-text"
-              >
-                Gordura
-              </label>
-              <div class="min-w-0">
-                <InputNumber
-                  id="quick-ingredient-fat"
-                  v-model="quickIngredientForm.fat"
-                  :min="0"
-                  :max="100000"
-                  :maxFractionDigits="1"
-                  placeholder="0"
-                  class="w-full"
-                  input-class="w-full"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="flex justify-end gap-2 pt-2">
-          <Button
-            severity="secondary"
-            outlined
-            @click="quickIngredientDialogOpen = false"
-            >Cancelar</Button
-          >
-          <Button :disabled="!quickIngredientValid" @click="saveQuickIngredient">
-            Salvar
-          </Button>
-        </div>
-      </div>
-    </Dialog>
+    <CreateIngredientDialog
+      v-model="quickIngredientDialogOpen"
+      :dialog-style="todayDialogStyle"
+      id-prefix="app-meal-quick-ingredient"
+      @saved="onQuickIngredientSaved"
+    />
 
     <Dialog
       v-model:visible="weightDialogOpen"
@@ -2282,8 +2196,9 @@ watch(removeWeightDialogOpen, (open) => {
             v-model="weightForm.kg"
             :min="0"
             :max="400"
-            :minFractionDigits="1"
-            :maxFractionDigits="1"
+            locale="pt-BR"
+            :min-fraction-digits="0"
+            :max-fraction-digits="1"
             class="w-full"
             input-class="w-full"
           />
@@ -2391,56 +2306,6 @@ watch(removeWeightDialogOpen, (open) => {
             label="Salvar"
             size="small"
             @click="saveCalorieMeta"
-          />
-        </div>
-      </div>
-    </Dialog>
-
-    <Dialog
-      v-model:visible="weightGoalDialogOpen"
-      modal
-      header="Meta de peso"
-      class="app-dialog"
-      :style="todayDialogStyle"
-      position="bottom"
-      :draggable="false"
-    >
-      <div class="flex flex-col gap-4">
-        <p class="m-0 text-[0.8125rem] leading-relaxed text-slate-300">
-          Este é o mesmo valor de
-          <strong class="text-slate-100">meta de peso</strong> do seu perfil.
-          Alterar aqui atualiza o perfil.
-        </p>
-        <div>
-          <label
-            class="mb-1.5 block text-[0.8125rem] font-medium text-app-text-muted-2"
-            for="goal-kg"
-            >Meta (kg)</label
-          >
-          <InputNumber
-            id="goal-kg"
-            v-model="weightGoalForm"
-            :min="0"
-            :max="400"
-            :minFractionDigits="1"
-            :maxFractionDigits="1"
-            class="w-full"
-            input-class="w-full"
-          />
-        </div>
-        <div class="flex justify-end gap-2">
-          <Button
-            label="Cancelar"
-            severity="secondary"
-            outlined
-            size="small"
-            class="border-app-border"
-            @click="weightGoalDialogOpen = false"
-          />
-          <Button
-            label="Salvar"
-            size="small"
-            @click="saveWeightGoalDialog"
           />
         </div>
       </div>

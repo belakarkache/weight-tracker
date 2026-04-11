@@ -44,6 +44,8 @@ function normalizeMeal(m) {
           protein: entry?.protein != null ? round1(entry.protein) : null,
           carbs: entry?.carbs != null ? round1(entry.carbs) : null,
           fat: entry?.fat != null ? round1(entry.fat) : null,
+          sodium:
+            entry?.sodium != null ? Math.round(Number(entry.sodium)) : null,
         }))
         .filter(
           (entry) =>
@@ -82,6 +84,7 @@ function normalizeMeal(m) {
     protein: m?.protein != null ? round1(m.protein) : null,
     carbs: m?.carbs != null ? round1(m.carbs) : null,
     fat: m?.fat != null ? round1(m.fat) : null,
+    sodium: m?.sodium != null ? Math.round(Number(m.sodium)) : null,
     ingredients,
   };
 }
@@ -123,9 +126,10 @@ export function dayTotals(meals) {
       acc.protein += Number(m.protein) || 0;
       acc.carbs += Number(m.carbs) || 0;
       acc.fat += Number(m.fat) || 0;
+      acc.sodium += Number(m.sodium) || 0;
       return acc;
     },
-    { kcal: 0, protein: 0, carbs: 0, fat: 0 },
+    { kcal: 0, protein: 0, carbs: 0, fat: 0, sodium: 0 },
   );
 }
 
@@ -137,6 +141,19 @@ export function latestWeightKgBeforeOrOn(entries, date) {
       const t = new Date(w.recordedAt);
       if (Number.isNaN(t.getTime())) continue;
       if (t > end) continue;
+      if (!best || t > best.t) best = { t, kg: w.kg };
+    }
+  }
+  return best?.kg ?? null;
+}
+
+/** Última pesagem registrada em qualquer dia (por data/hora do registro). */
+export function latestWeightKgGlobally(entries) {
+  let best = null;
+  for (const day of Object.values(entries || {})) {
+    for (const w of day?.weights ?? []) {
+      const t = new Date(w.recordedAt);
+      if (Number.isNaN(t.getTime())) continue;
       if (!best || t > best.t) best = { t, kg: w.kg };
     }
   }
@@ -223,5 +240,6 @@ export function useDailyLog() {
     refresh,
     dayTotals,
     latestWeightKgBeforeOrOn: (d) => latestWeightKgBeforeOrOn(entries.value, d),
+    latestWeightKgGlobally: () => latestWeightKgGlobally(entries.value),
   };
 }

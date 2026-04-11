@@ -83,6 +83,59 @@
   display: none;
 }
 
+/* Barras de rolagem internas (desktop): alinhadas ao tema escuro */
+@media (min-width: 768px) {
+  .app-scroll,
+  .app-dialog.p-dialog .p-dialog-content,
+  .p-multiselect-overlay .p-multiselect-list,
+  .p-select-overlay .p-select-list,
+  .p-listbox-list {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--app-text-muted-2) 42%, transparent)
+      var(--app-bg-surface);
+  }
+
+  .app-scroll::-webkit-scrollbar,
+  .app-dialog.p-dialog .p-dialog-content::-webkit-scrollbar,
+  .p-multiselect-overlay .p-multiselect-list::-webkit-scrollbar,
+  .p-select-overlay .p-select-list::-webkit-scrollbar,
+  .p-listbox-list::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .app-scroll::-webkit-scrollbar-track,
+  .app-dialog.p-dialog .p-dialog-content::-webkit-scrollbar-track,
+  .p-multiselect-overlay .p-multiselect-list::-webkit-scrollbar-track,
+  .p-select-overlay .p-select-list::-webkit-scrollbar-track,
+  .p-listbox-list::-webkit-scrollbar-track {
+    background: var(--app-bg-surface);
+    border-radius: var(--app-radius-sm);
+  }
+
+  .app-scroll::-webkit-scrollbar-thumb,
+  .app-dialog.p-dialog .p-dialog-content::-webkit-scrollbar-thumb,
+  .p-multiselect-overlay .p-multiselect-list::-webkit-scrollbar-thumb,
+  .p-select-overlay .p-select-list::-webkit-scrollbar-thumb,
+  .p-listbox-list::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--app-text-muted-2) 50%, transparent);
+    border-radius: var(--app-radius-sm);
+    border: 2px solid var(--app-bg-surface);
+  }
+
+  .app-scroll::-webkit-scrollbar-thumb:hover,
+  .app-dialog.p-dialog .p-dialog-content::-webkit-scrollbar-thumb:hover,
+  .p-multiselect-overlay .p-multiselect-list::-webkit-scrollbar-thumb:hover,
+  .p-select-overlay .p-select-list::-webkit-scrollbar-thumb:hover,
+  .p-listbox-list::-webkit-scrollbar-thumb:hover {
+    background: color-mix(
+      in srgb,
+      var(--accent-teal) 35%,
+      var(--app-text-muted-2) 45%
+    );
+  }
+}
+
 .app-body-bg {
   background: var(--app-bg);
   background-image:
@@ -1153,11 +1206,16 @@
   box-sizing: border-box;
   pointer-events: none;
 }
+
 @media (min-width: 768px) {
-  .pwa-toast.p-toast {
-    max-width: var(--app-shell-max);
-    margin-left: auto;
-    margin-right: auto;
+  .pwa-toast.p-toast.p-toast-top-center {
+    left: 50% !important;
+    right: auto !important;
+    width: min(100vw, var(--app-shell-max)) !important;
+    max-width: var(--app-shell-max) !important;
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    transform: translateX(-50%) !important;
   }
 }
 .pwa-toast.p-toast .p-toast-message {

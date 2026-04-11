@@ -19,6 +19,7 @@ import {
   IconInfoCircle,
 } from "@tabler/icons-vue";
 import InfoNotice from "../components/InfoNotice.vue";
+import CreateIngredientDialog from "../components/CreateIngredientDialog.vue";
 import { useIngredients } from "../composables/useIngredients";
 import { useRecipes } from "../composables/useRecipes";
 import { useTacoIngredients } from "../composables/useTacoIngredients";
@@ -85,6 +86,7 @@ const ingredients = computed(() =>
   mergeIngredientOptionsWindowed(
     storedIngredients.value,
     tacoList.value,
+    [],
     form.value.ingredientIds,
     recipeIngredientFilter.value,
   ),
@@ -365,6 +367,25 @@ function confirmRemove() {
   removeOpen.value = false;
   removing.value = null;
 }
+
+const quickIngredientDialogOpen = ref(false);
+
+function openQuickIngredientDialog() {
+  quickIngredientDialogOpen.value = true;
+}
+
+function onQuickIngredientSaved({ ingredient, referenceQuantity }) {
+  refresh();
+  const id = ingredient?.id;
+  if (!id) return;
+  form.value.lineQuantities = {
+    ...(form.value.lineQuantities ?? {}),
+    [id]: referenceQuantity,
+  };
+  form.value.ingredientIds = [
+    ...new Set([...(form.value.ingredientIds ?? []), id]),
+  ];
+}
 </script>
 
 <template>
@@ -377,7 +398,7 @@ function confirmRemove() {
     </AppHeader>
 
     <div
-      class="mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 pb-8 pt-4"
+      class="app-scroll mx-auto flex min-h-0 w-full flex-1 flex-col overflow-y-auto px-4 pb-8 pt-4"
     >
       <section
         class="flex shrink-0 flex-col gap-4 rounded-app-lg border border-app-border bg-app-surface p-4"
@@ -601,7 +622,9 @@ function confirmRemove() {
       :header="dialogTitle"
       :style="appDialogStyle"
     >
-      <div class="flex max-h-[min(70vh,520px)] flex-col gap-4 overflow-y-auto">
+      <div
+        class="app-scroll flex max-h-[min(70vh,520px)] flex-col gap-4 overflow-y-auto"
+      >
         <div class="flex flex-col gap-2">
           <label
             for="recipe-name"
@@ -638,7 +661,19 @@ function confirmRemove() {
             :loading="recipeIngredientMsLoading"
             class="w-full"
             @filter="onRecipeIngredientFilter"
-          />
+          >
+            <template #footer>
+              <div class="border-t border-app-border p-2">
+                <Button
+                  variant="link"
+                  class="!px-0 text-teal-400"
+                  @click="openQuickIngredientDialog"
+                >
+                  + Novo ingrediente
+                </Button>
+              </div>
+            </template>
+          </MultiSelect>
         </div>
 
         <div
@@ -739,6 +774,10 @@ function confirmRemove() {
           <span class="tabular-nums text-app-text-muted"
             >G {{ fullRecipeTotals.fat }} g</span
           >
+          <span class="mx-1 text-app-text-muted">·</span>
+          <span class="tabular-nums text-app-text-muted"
+            >Na {{ Math.round(fullRecipeTotals.sodium || 0) }} mg</span
+          >
         </div>
 
         <div class="flex justify-end gap-2 pt-2">
@@ -756,6 +795,13 @@ function confirmRemove() {
         </div>
       </div>
     </Dialog>
+
+    <CreateIngredientDialog
+      v-model="quickIngredientDialogOpen"
+      :dialog-style="appDialogStyle"
+      id-prefix="recipe-quick-ingredient"
+      @saved="onQuickIngredientSaved"
+    />
 
     <Dialog
       v-model:visible="removeOpen"

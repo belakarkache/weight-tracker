@@ -63,11 +63,59 @@ function round1(n) {
   return Math.round(Number(n) * 10) / 10;
 }
 
-export function scaleIngredientMacros(ingredient, consumedQty) {
-  const refQty = Number(ingredient?.quantity) || 100;
+function roundSodiumMg(n) {
+  return Math.round(Number(n) || 0);
+}
+
+export function listReferenceMeasures(ingredient) {
+  const qty = Number(ingredient?.quantity) || 100;
+  const u = String(ingredient?.unit ?? "g").trim() || "g";
+  const list = [{ quantity: qty, unit: u, label: null }];
+  for (const alt of ingredient?.alternateMeasures ?? []) {
+    const aq = Number(alt?.quantity);
+    const au = String(alt?.unit ?? "g").trim() || "g";
+    if (!aq || aq <= 0) continue;
+    const lbl =
+      typeof alt?.label === "string" && alt.label.trim()
+        ? alt.label.trim()
+        : null;
+    list.push({ quantity: aq, unit: au, label: lbl });
+  }
+  return list;
+}
+
+export function referenceMeasureSelectOptions(ingredient) {
+  const measures = listReferenceMeasures(ingredient);
+  const seen = new Set();
+  const opts = [];
+  for (const m of measures) {
+    if (seen.has(m.unit)) continue;
+    seen.add(m.unit);
+    const base = `${m.quantity} ${m.unit}`;
+    const label = m.label ? `${m.label} (${base})` : base;
+    opts.push({ label, value: m.unit });
+  }
+  return opts;
+}
+
+export function referenceMeasureUnitValues(ingredient) {
+  return referenceMeasureSelectOptions(ingredient).map((o) => o.value);
+}
+
+export function scaleIngredientMacros(ingredient, consumedQty, consumedUnit) {
   const q = Number(consumedQty);
-  if (!ingredient || !q || q <= 0 || refQty <= 0) {
-    return { kcal: 0, protein: 0, carbs: 0, fat: 0 };
+  if (!ingredient || !q || q <= 0) {
+    return { kcal: 0, protein: 0, carbs: 0, fat: 0, sodium: 0 };
+  }
+  const measures = listReferenceMeasures(ingredient);
+  const want =
+    consumedUnit != null && String(consumedUnit).trim()
+      ? String(consumedUnit).trim()
+      : String(ingredient?.unit ?? "g").trim() || "g";
+  const ref = measures.find((m) => m.unit === want) ?? measures[0];
+  const refQty = Number(ref?.quantity) || 100;
+  if (refQty <= 0) {
+    return { kcal: 0, protein: 0, carbs: 0, fat: 0, sodium: 0 };
   }
   const factor = q / refQty;
   return {
@@ -75,5 +123,6 @@ export function scaleIngredientMacros(ingredient, consumedQty) {
     protein: round1((Number(ingredient.protein) || 0) * factor),
     carbs: round1((Number(ingredient.carbs) || 0) * factor),
     fat: round1((Number(ingredient.fat) || 0) * factor),
+    sodium: roundSodiumMg((Number(ingredient.sodium) || 0) * factor),
   };
 }

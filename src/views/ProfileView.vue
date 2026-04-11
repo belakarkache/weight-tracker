@@ -1,8 +1,12 @@
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, onActivated } from "vue";
 import { useRouter } from "vue-router";
 import { useToast } from "primevue/usetoast";
 import { useOnboarding } from "../composables/useOnboarding";
+import {
+  useDailyLog,
+  latestWeightKgGlobally,
+} from "../composables/useDailyLog";
 import { wipeAllAppLocalStorage } from "../utils/wipeAppStorage";
 import AppHeader from "../components/AppHeader.vue";
 import Button from "primevue/button";
@@ -26,6 +30,7 @@ import {
 const router = useRouter();
 const toast = useToast();
 const { getStored, save } = useOnboarding();
+const dailyLog = useDailyLog();
 
 const form = ref({
   height: null,
@@ -35,6 +40,8 @@ const form = ref({
   activityLevel: null,
   calorieDeficit: null,
   goalWeight: null,
+  sodiumTargetMg: null,
+  fatTargetG: null,
 });
 
 const sexOptions = [
@@ -98,16 +105,24 @@ const appDialogStyle = {
 };
 
 function loadStored() {
+  dailyLog.refresh();
   const storedProfile = getStored();
+  const latest = latestWeightKgGlobally(dailyLog.entries.value);
+  const weightFromLog =
+    latest != null && Number(latest) > 0
+      ? Math.round(Number(latest) * 10) / 10
+      : null;
   if (storedProfile) {
     form.value = {
       height: storedProfile.height ?? null,
-      weight: storedProfile.weight ?? null,
+      weight: weightFromLog ?? storedProfile.weight ?? null,
       age: storedProfile.age ?? null,
       sex: storedProfile.sex ?? null,
       activityLevel: storedProfile.activityLevel ?? null,
       calorieDeficit: storedProfile.calorieDeficit ?? null,
       goalWeight: storedProfile.goalWeight ?? null,
+      sodiumTargetMg: storedProfile.sodiumTargetMg ?? null,
+      fatTargetG: storedProfile.fatTargetG ?? null,
     };
   }
 }
@@ -131,6 +146,8 @@ function submit() {
     activityLevel: form.value.activityLevel,
     calorieDeficit: form.value.calorieDeficit,
     goalWeight: form.value.goalWeight,
+    sodiumTargetMg: form.value.sodiumTargetMg,
+    fatTargetG: form.value.fatTargetG,
   });
   toast.add({
     group: "pwa",
@@ -157,6 +174,7 @@ function confirmClear() {
 }
 
 onMounted(loadStored);
+onActivated(loadStored);
 </script>
 
 <template>
@@ -167,7 +185,7 @@ onMounted(loadStored);
     >
     </AppHeader>
     <div
-      class="mx-auto flex min-h-0 w-full max-w-full flex-1 flex-col gap-5 overflow-y-auto px-4 pb-[max(9rem,calc(6rem+env(safe-area-inset-bottom)))] pt-4"
+      class="app-scroll mx-auto flex min-h-0 w-full max-w-full flex-1 flex-col gap-5 overflow-y-auto px-4 pb-[max(9rem,calc(6rem+env(safe-area-inset-bottom)))] pt-4"
     >
       <form
         class="flex flex-col gap-6"
@@ -208,6 +226,8 @@ onMounted(loadStored);
                 v-model="form.weight"
                 :min="30"
                 :max="300"
+                locale="pt-BR"
+                :max-fraction-digits="1"
                 suffix=" kg"
                 placeholder="0"
                 class="w-full"
@@ -329,6 +349,42 @@ onMounted(loadStored);
                 :max="300"
                 suffix=" kg"
                 placeholder="0"
+                class="w-full"
+                input-class="w-full"
+              />
+            </div>
+            <div class="flex flex-col gap-2">
+              <label
+                for="profile-fat-target"
+                class="text-[0.8125rem] font-medium text-app-text-muted-2"
+                >Meta de gordura (g/dia, opcional)</label
+              >
+              <InputNumber
+                id="profile-fat-target"
+                v-model="form.fatTargetG"
+                :min="0"
+                :max="500"
+                locale="pt-BR"
+                :max-fraction-digits="1"
+                suffix=" g"
+                placeholder="—"
+                class="w-full"
+                input-class="w-full"
+              />
+            </div>
+            <div class="flex flex-col gap-2">
+              <label
+                for="profile-sodium-target"
+                class="text-[0.8125rem] font-medium text-app-text-muted-2"
+                >Meta de sódio (mg/dia, opcional)</label
+              >
+              <InputNumber
+                id="profile-sodium-target"
+                v-model="form.sodiumTargetMg"
+                :min="0"
+                :max="20000"
+                suffix=" mg"
+                placeholder="—"
                 class="w-full"
                 input-class="w-full"
               />

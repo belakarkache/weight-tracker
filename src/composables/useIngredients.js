@@ -8,18 +8,36 @@ const safeParse = (raw) => {
   }
 };
 
-const normalizeIngredient = (i) => ({
-  id: i?.id ?? crypto?.randomUUID?.() ?? String(Date.now()),
-  name: (i?.name ?? "").trim(),
-  unit: i?.unit ?? "g",
-  quantity: i?.quantity ?? 100,
-  kcal: i?.kcal ?? i?.calories ?? i?.kcalPer100 ?? null,
-  protein: i?.protein ?? i?.proteinPer100 ?? null,
-  carbs: i?.carbs ?? i?.carbsPer100 ?? null,
-  fat: i?.fat ?? i?.fatPer100 ?? null,
-  updatedAt: i?.updatedAt ?? new Date().toISOString(),
-  createdAt: i?.createdAt ?? new Date().toISOString(),
-});
+function normalizeAlternateMeasure(m) {
+  const q = m?.quantity != null ? Number(m.quantity) : null;
+  const unit = String(m?.unit ?? "g").trim() || "g";
+  const label =
+    typeof m?.label === "string" && m.label.trim() ? m.label.trim() : null;
+  if (q == null || !Number.isFinite(q) || q <= 0) return null;
+  return { quantity: q, unit, label };
+}
+
+const normalizeIngredient = (i) => {
+  const rawAlts = Array.isArray(i?.alternateMeasures)
+    ? i.alternateMeasures.map(normalizeAlternateMeasure).filter(Boolean)
+    : [];
+  const primaryUnit = String(i?.unit ?? "g").trim() || "g";
+  const alternateMeasures = rawAlts.filter((a) => a.unit !== primaryUnit);
+  return {
+    id: i?.id ?? crypto?.randomUUID?.() ?? String(Date.now()),
+    name: (i?.name ?? "").trim(),
+    unit: primaryUnit,
+    quantity: i?.quantity ?? 100,
+    alternateMeasures,
+    kcal: i?.kcal ?? i?.calories ?? i?.kcalPer100 ?? null,
+    protein: i?.protein ?? i?.proteinPer100 ?? null,
+    carbs: i?.carbs ?? i?.carbsPer100 ?? null,
+    fat: i?.fat ?? i?.fatPer100 ?? null,
+    sodium: i?.sodium ?? i?.sodiumMg ?? i?.sodiumPer100 ?? null,
+    updatedAt: i?.updatedAt ?? new Date().toISOString(),
+    createdAt: i?.createdAt ?? new Date().toISOString(),
+  };
+};
 
 const sortByName = (a, b) =>
   (a?.name ?? "").localeCompare(b?.name ?? "", "pt-BR", { sensitivity: "base" });

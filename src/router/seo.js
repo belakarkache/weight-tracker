@@ -18,6 +18,11 @@ const ROUTE_COPY = {
     description:
       "Gráfico de peso, variação total, jornada, média semanal e resumo nutricional.",
   },
+  weight: {
+    title: "Peso",
+    description:
+      "Peso atual, distância da meta, histórico recente e ajuste da meta de peso.",
+  },
   ingredients: {
     title: "Ingredientes",
     description:

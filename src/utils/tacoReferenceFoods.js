@@ -20,6 +20,10 @@ export function mapTacoJsonRows(raw) {
       protein: Math.round(num(row.protein_g) * 10) / 10,
       carbs: Math.round(num(row.carbohydrate_g) * 10) / 10,
       fat: Math.round(num(row.lipid_g) * 10) / 10,
+      sodium:
+        row.sodium_mg != null
+          ? Math.round(num(row.sodium_mg) * 10) / 10
+          : null,
       tacoReference: true,
     };
   });
@@ -46,14 +50,20 @@ export const TACO_LIST_PREVIEW_COUNT = 64;
 export const TACO_FILTER_RESULT_CAP = 180;
 export const MULTISELECT_VIRTUAL_ITEM_SIZE = 38;
 
+export const RECIPE_OPTIONS_PREVIEW_COUNT = 32;
+
 export function mergeIngredientOptionsWindowed(
   userList,
   tacoList,
+  recipeOptions,
   selectedIds,
   filterText,
 ) {
   const q = (filterText ?? "").trim().toLowerCase();
   const map = buildIngredientLookupMap(userList, tacoList);
+  for (const r of recipeOptions ?? []) {
+    if (r?.id) map[r.id] = r;
+  }
   const selectedItems = (selectedIds ?? [])
     .map((id) => map[id])
     .filter(Boolean);
@@ -62,13 +72,24 @@ export function mergeIngredientOptionsWindowed(
   if (!q) {
     const user = [...(userList ?? [])];
     const taco = [...(tacoList ?? [])].slice(0, TACO_LIST_PREVIEW_COUNT);
-    pool = [...user, ...taco];
+    const recipes = [...(recipeOptions ?? [])].slice(
+      0,
+      RECIPE_OPTIONS_PREVIEW_COUNT,
+    );
+    pool = [...user, ...recipes, ...taco];
   } else {
     const userHit = (userList ?? []).filter((u) =>
       String(u.name ?? "")
         .toLowerCase()
         .includes(q),
     );
+    const recipeHit = (recipeOptions ?? [])
+      .filter((r) =>
+        String(r.name ?? "")
+          .toLowerCase()
+          .includes(q),
+      )
+      .slice(0, TACO_FILTER_RESULT_CAP);
     const tacoHit = (tacoList ?? [])
       .filter((t) =>
         String(t.name ?? "")
@@ -76,7 +97,7 @@ export function mergeIngredientOptionsWindowed(
           .includes(q),
       )
       .slice(0, TACO_FILTER_RESULT_CAP);
-    pool = [...userHit, ...tacoHit];
+    pool = [...userHit, ...recipeHit, ...tacoHit];
   }
 
   const byId = new Map();

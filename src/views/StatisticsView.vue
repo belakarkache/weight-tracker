@@ -12,6 +12,7 @@ import {
   computeWeightStats,
   hasStatsOverviewData,
   weightSeriesToChartPoints,
+  weightChartMarkerIndices,
 } from "../utils/statsAggregates";
 
 const router = useRouter();
@@ -39,6 +40,15 @@ const nutrition = computed(() =>
 const chartPoints = computed(() =>
   weightSeriesToChartPoints(weightSeries.value),
 );
+
+const chartMarkerPoints = computed(() => {
+  const pts = chartPoints.value;
+  if (!pts.length) return [];
+  const n = weightSeries.value.length;
+  const idxs =
+    n > 6 ? weightChartMarkerIndices(n, 6) : pts.map((_, i) => i);
+  return idxs.map((i) => pts[i]).filter(Boolean);
+});
 
 const chartKgRange = computed(() => {
   const s = weightSeries.value;
@@ -122,7 +132,7 @@ function fmtSignedKgPerWeek(delta) {
     />
 
     <div
-      class="mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col gap-4 overflow-y-auto px-4 pb-28 pt-4"
+      class="app-scroll mx-auto flex min-h-0 w-full max-w-lg flex-1 flex-col gap-4 overflow-y-auto px-4 pb-28 pt-4"
     >
       <template v-if="!hasData">
         <InfoNotice>
@@ -270,7 +280,7 @@ function fmtSignedKgPerWeek(delta) {
                 stroke-linejoin="round"
               />
               <g
-                v-for="(p, i) in chartPoints"
+                v-for="(p, i) in chartMarkerPoints"
                 :key="i"
               >
                 <circle
